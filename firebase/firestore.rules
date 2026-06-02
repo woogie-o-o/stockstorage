@@ -1,0 +1,487 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && (
+          request.auth.uid in [
+            "1KzEXKZMoFaYOymYyoI283AR3Y32",
+            "v4a3ClF3FhWGXsGnZ29wyvQNSCX2"
+          ]
+          || request.auth.token.admin == true
+        );
+    }
+
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function createsOwnDocument() {
+      return signedIn() && request.resource.data.uid == request.auth.uid;
+    }
+
+    function validString(value, maxSize) {
+      return value is string && value.size() <= maxSize;
+    }
+
+    function validRequiredString(value, maxSize) {
+      return validString(value, maxSize) && value.size() > 0;
+    }
+
+    function validNumber(value) {
+      return value is int || value is float;
+    }
+
+    function validNonNegativeInt(value) {
+      return value is int && value >= 0;
+    }
+
+    function validImageUrls(value) {
+      return value is list && value.size() <= 10;
+    }
+
+    function validNullableTimestamp(value) {
+      return value == null || value is timestamp;
+    }
+
+    function createsOwnLike(uid) {
+      return isOwner(uid)
+        && request.resource.data.keys().hasOnly(["uid", "createdAt"])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.createdAt is timestamp;
+    }
+
+    function validLikeCounterValue() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(["likes"])
+        && request.resource.data.likes is int
+        && resource.data.likes is int
+        && request.resource.data.likes >= 0;
+    }
+
+    function initializesLikeCounter() {
+      return request.resource.data.likes is int
+        && request.resource.data.likes == 0;
+    }
+
+    function preservesLikeCounter() {
+      return request.resource.data.likes == resource.data.likes;
+    }
+
+    function preservesOwnerUid() {
+      return request.resource.data.uid == resource.data.uid;
+    }
+
+    function postLikeCounterDelta(postId) {
+      return validLikeCounterValue()
+        && (
+          (
+            request.resource.data.likes == resource.data.likes + 1
+            && !exists(/databases/$(database)/documents/posts/$(postId)/likes/$(request.auth.uid))
+            && existsAfter(/databases/$(database)/documents/posts/$(postId)/likes/$(request.auth.uid))
+          )
+          || (
+            request.resource.data.likes == resource.data.likes - 1
+            && exists(/databases/$(database)/documents/posts/$(postId)/likes/$(request.auth.uid))
+            && !existsAfter(/databases/$(database)/documents/posts/$(postId)/likes/$(request.auth.uid))
+          )
+        );
+    }
+
+    function createsPostLike(postId, uid) {
+      return createsOwnLike(uid)
+        && getAfter(/databases/$(database)/documents/posts/$(postId)).data.likes
+          == get(/databases/$(database)/documents/posts/$(postId)).data.likes + 1;
+    }
+
+    function deletesPostLike(postId, uid) {
+      return isOwner(uid)
+        && getAfter(/databases/$(database)/documents/posts/$(postId)).data.likes
+          == get(/databases/$(database)/documents/posts/$(postId)).data.likes - 1;
+    }
+
+    function journalLikeCounterDelta(journalId) {
+      return validLikeCounterValue()
+        && (
+          (
+            request.resource.data.likes == resource.data.likes + 1
+            && !exists(/databases/$(database)/documents/trading_journal/$(journalId)/likes/$(request.auth.uid))
+            && existsAfter(/databases/$(database)/documents/trading_journal/$(journalId)/likes/$(request.auth.uid))
+          )
+          || (
+            request.resource.data.likes == resource.data.likes - 1
+            && exists(/databases/$(database)/documents/trading_journal/$(journalId)/likes/$(request.auth.uid))
+            && !existsAfter(/databases/$(database)/documents/trading_journal/$(journalId)/likes/$(request.auth.uid))
+          )
+        );
+    }
+
+    function createsJournalLike(journalId, uid) {
+      return createsOwnLike(uid)
+        && getAfter(/databases/$(database)/documents/trading_journal/$(journalId)).data.likes
+          == get(/databases/$(database)/documents/trading_journal/$(journalId)).data.likes + 1;
+    }
+
+    function deletesJournalLike(journalId, uid) {
+      return isOwner(uid)
+        && getAfter(/databases/$(database)/documents/trading_journal/$(journalId)).data.likes
+          == get(/databases/$(database)/documents/trading_journal/$(journalId)).data.likes - 1;
+    }
+
+    function parentPostOwner(postId) {
+      return signedIn() && get(/databases/$(database)/documents/posts/$(postId)).data.uid == request.auth.uid;
+    }
+
+    function parentJournalOwner(journalId) {
+      return signedIn() && get(/databases/$(database)/documents/trading_journal/$(journalId)).data.uid == request.auth.uid;
+    }
+
+    function parentJournalPublic(journalId) {
+      return get(/databases/$(database)/documents/trading_journal/$(journalId)).data.isPublic == true;
+    }
+
+    function validCommentDocument() {
+      return createsOwnDocument()
+        && request.resource.data.keys().hasAll(["uid", "nickname", "content", "createdAt"])
+        && request.resource.data.keys().hasOnly(["uid", "nickname", "content", "createdAt"])
+        && validString(request.resource.data.nickname, 80)
+        && validRequiredString(request.resource.data.content, 5000)
+        && request.resource.data.createdAt is timestamp;
+    }
+
+    function validPostDocument() {
+      return createsOwnDocument()
+        && request.resource.data.keys().hasAll(["uid", "nickname", "title", "content", "likes", "createdAt", "imageUrls", "authorLevel"])
+        && request.resource.data.keys().hasOnly(["uid", "nickname", "title", "content", "likes", "createdAt", "imageUrls", "authorLevel"])
+        && validString(request.resource.data.nickname, 80)
+        && validRequiredString(request.resource.data.title, 160)
+        && validRequiredString(request.resource.data.content, 20000)
+        && initializesLikeCounter()
+        && request.resource.data.createdAt is timestamp
+        && validImageUrls(request.resource.data.imageUrls)
+        && request.resource.data.authorLevel is int;
+    }
+
+    function validPostEdit() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(["title", "content", "imageUrls"])
+        && validRequiredString(request.resource.data.title, 160)
+        && validRequiredString(request.resource.data.content, 20000)
+        && validImageUrls(request.resource.data.imageUrls);
+    }
+
+    function validJournalDocument() {
+      return createsOwnDocument()
+        && request.resource.data.keys().hasAll(["uid", "nickname", "stockName", "ticker", "market", "action", "price", "quantity", "tradeDate", "note", "isPublic", "likes", "createdAt", "publishedAt", "buyPrice", "linkedBuyId"])
+        && request.resource.data.keys().hasOnly(["uid", "nickname", "stockName", "ticker", "market", "action", "price", "quantity", "tradeDate", "note", "isPublic", "likes", "createdAt", "publishedAt", "buyPrice", "linkedBuyId"])
+        && validString(request.resource.data.nickname, 80)
+        && validRequiredString(request.resource.data.stockName, 120)
+        && validRequiredString(request.resource.data.ticker, 40)
+        && validRequiredString(request.resource.data.market, 20)
+        && validRequiredString(request.resource.data.action, 20)
+        && validNumber(request.resource.data.price)
+        && validNumber(request.resource.data.quantity)
+        && request.resource.data.tradeDate is timestamp
+        && validString(request.resource.data.note, 10000)
+        && request.resource.data.isPublic is bool
+        && initializesLikeCounter()
+        && request.resource.data.createdAt is timestamp
+        && validNullableTimestamp(request.resource.data.publishedAt)
+        && validNumber(request.resource.data.buyPrice)
+        && validString(request.resource.data.linkedBuyId, 120);
+    }
+
+    function validJournalEdit() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(["nickname", "stockName", "ticker", "market", "action", "price", "quantity", "tradeDate", "note", "isPublic", "publishedAt", "buyPrice", "linkedBuyId"])
+        && validString(request.resource.data.nickname, 80)
+        && validRequiredString(request.resource.data.stockName, 120)
+        && validRequiredString(request.resource.data.ticker, 40)
+        && validRequiredString(request.resource.data.market, 20)
+        && validRequiredString(request.resource.data.action, 20)
+        && validNumber(request.resource.data.price)
+        && validNumber(request.resource.data.quantity)
+        && request.resource.data.tradeDate is timestamp
+        && validString(request.resource.data.note, 10000)
+        && request.resource.data.isPublic is bool
+        && validNullableTimestamp(request.resource.data.publishedAt)
+        && validNumber(request.resource.data.buyPrice)
+        && validString(request.resource.data.linkedBuyId, 120);
+    }
+
+    function validReportDocument(reportId) {
+      return signedIn()
+        && request.resource.data.keys().hasAll(["id", "target", "reporterUid", "targetUid", "contentType", "contentId", "reason", "createdAt"])
+        && request.resource.data.keys().hasOnly(["id", "target", "reporterUid", "targetUid", "contentType", "contentId", "reason", "createdAt"])
+        && request.resource.data.id == reportId
+        && request.resource.data.reporterUid == request.auth.uid
+        && validRequiredString(request.resource.data.target, 240)
+        && validString(request.resource.data.targetUid, 128)
+        && validRequiredString(request.resource.data.contentType, 40)
+        && validString(request.resource.data.contentId, 128)
+        && validRequiredString(request.resource.data.reason, 500)
+        && request.resource.data.createdAt is timestamp;
+    }
+
+    function validPublicUserDocument(uid) {
+      return request.resource.data.keys().hasAll(["uid", "nickname", "level", "postCount", "commentCount", "attendanceCount", "bonusXp", "lastAttendanceDate", "updatedAt"])
+        && request.resource.data.keys().hasOnly(["uid", "nickname", "level", "postCount", "commentCount", "attendanceCount", "bonusXp", "lastAttendanceDate", "updatedAt"])
+        && request.resource.data.uid == uid
+        && validString(request.resource.data.nickname, 80)
+        && validNonNegativeInt(request.resource.data.level)
+        && request.resource.data.level >= 1
+        && validNonNegativeInt(request.resource.data.postCount)
+        && validNonNegativeInt(request.resource.data.commentCount)
+        && validNonNegativeInt(request.resource.data.attendanceCount)
+        && validNonNegativeInt(request.resource.data.bonusXp)
+        && validString(request.resource.data.lastAttendanceDate, 16)
+        && request.resource.data.updatedAt is timestamp;
+    }
+
+    function validUserMemoDocument() {
+      return request.resource.data.keys().hasAll(["text", "updatedAt"])
+        && request.resource.data.keys().hasOnly(["text", "updatedAt"])
+        && validString(request.resource.data.text, 20000)
+        && request.resource.data.updatedAt is timestamp;
+    }
+
+    function validUserPickCommentIndex() {
+      return request.resource.data.keys().hasAll(["pickId", "text", "createdAt"])
+        && request.resource.data.keys().hasOnly(["pickId", "text", "createdAt"])
+        && validRequiredString(request.resource.data.pickId, 128)
+        && validRequiredString(request.resource.data.text, 5000)
+        && request.resource.data.createdAt is timestamp;
+    }
+
+    function validUserJournalCommentIndex() {
+      return request.resource.data.keys().hasAll(["journalId", "text", "createdAt"])
+        && request.resource.data.keys().hasOnly(["journalId", "text", "createdAt"])
+        && validRequiredString(request.resource.data.journalId, 128)
+        && validRequiredString(request.resource.data.text, 5000)
+        && request.resource.data.createdAt is timestamp;
+    }
+
+    function validUserPostCommentIndex() {
+      return (
+          request.resource.data.keys().hasAll(["postId", "text", "createdAt"])
+          && request.resource.data.keys().hasOnly(["postId", "text", "createdAt"])
+          && validRequiredString(request.resource.data.postId, 128)
+          && validRequiredString(request.resource.data.text, 5000)
+          && request.resource.data.createdAt is timestamp
+        )
+        || (
+          request.resource.data.keys().hasAll(["analysisId", "text", "createdAt"])
+          && request.resource.data.keys().hasOnly(["analysisId", "text", "createdAt"])
+          && validRequiredString(request.resource.data.analysisId, 128)
+          && validRequiredString(request.resource.data.text, 5000)
+          && request.resource.data.createdAt is timestamp
+        );
+    }
+
+    function validBlockedUserDocument() {
+      return request.resource.data.keys().hasOnly(["createdAt"])
+        && request.resource.data.createdAt is timestamp;
+    }
+
+    function validPostAuthorFollowDocument(targetUid) {
+      return request.resource.data.keys().hasAll(["targetUid", "enabled", "updatedAt"])
+        && request.resource.data.keys().hasOnly(["targetUid", "enabled", "updatedAt"])
+        && request.resource.data.targetUid == targetUid
+        && request.resource.data.enabled is bool
+        && request.resource.data.updatedAt is timestamp;
+    }
+
+    function validUserAnalysisDocument(uid, analysisId) {
+      return request.resource.data.uid == uid
+        && request.resource.data.analysisId == analysisId
+        && validRequiredString(request.resource.data.ticker, 40)
+        && validString(request.resource.data.name, 120)
+        && validRequiredString(request.resource.data.market, 20)
+        && request.resource.data.updatedAt is timestamp;
+    }
+
+    match /ai_briefs/{briefId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /market_feature_stocks/{featureId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /market_investor_flow/{flowId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /fmkorea_stock_mentions_realtime/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /fmkorea_index/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /night_futures_prices/{priceId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /announcements/{noticeId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /reports/{reportId} {
+      allow create: if validReportDocument(reportId);
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /users/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create, update: if isOwner(uid) || isAdmin();
+      allow delete: if isAdmin();
+
+      match /memos/{stockKey} {
+        allow read: if isOwner(uid) || isAdmin();
+        allow create, update: if (isOwner(uid) || isAdmin()) && validUserMemoDocument();
+        allow delete: if isOwner(uid) || isAdmin();
+      }
+
+      match /myComments/{commentId} {
+        allow read: if isOwner(uid) || isAdmin();
+        allow create, update: if (isOwner(uid) || isAdmin()) && validUserPickCommentIndex();
+        allow delete: if isOwner(uid) || isAdmin();
+      }
+
+      match /myJournalComments/{commentId} {
+        allow read: if isOwner(uid) || isAdmin();
+        allow create, update: if (isOwner(uid) || isAdmin()) && validUserJournalCommentIndex();
+        allow delete: if isOwner(uid) || isAdmin();
+      }
+
+      match /myPostComments/{commentId} {
+        allow read: if isOwner(uid) || isAdmin();
+        allow create, update: if (isOwner(uid) || isAdmin()) && validUserPostCommentIndex();
+        allow delete: if isOwner(uid) || isAdmin();
+      }
+
+      match /blockedUsers/{targetUid} {
+        allow read: if isOwner(uid) || isAdmin();
+        allow create, update: if (isOwner(uid) || isAdmin()) && validBlockedUserDocument();
+        allow delete: if isOwner(uid) || isAdmin();
+      }
+
+      match /post_author_follows/{targetUid} {
+        allow read: if isOwner(uid) || isAdmin();
+        allow create, update: if (isOwner(uid) || isAdmin()) && validPostAuthorFollowDocument(targetUid);
+        allow delete: if isOwner(uid) || isAdmin();
+      }
+
+      match /stock_ai_analyses/{analysisId} {
+        allow read: if isOwner(uid) || isAdmin();
+        allow create, update: if (isOwner(uid) || isAdmin()) && validUserAnalysisDocument(uid, analysisId);
+        allow delete: if isOwner(uid) || isAdmin();
+      }
+
+      match /{userSubPath=**} {
+        allow read, write: if isAdmin();
+      }
+    }
+
+    match /user_public/{uid} {
+      allow read: if true;
+      allow create, update: if (isOwner(uid) || isAdmin()) && validPublicUserDocument(uid);
+      allow delete: if isAdmin();
+    }
+
+    match /stock_picks/{pickId} {
+      allow read: if true;
+      allow write: if isAdmin();
+
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if validCommentDocument();
+        allow update: if false;
+        allow delete: if signedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+      }
+    }
+
+    match /posts/{postId} {
+      allow read: if true;
+      allow create: if validPostDocument();
+      allow update: if signedIn()
+        && (
+          ((resource.data.uid == request.auth.uid || isAdmin()) && preservesOwnerUid() && preservesLikeCounter() && validPostEdit())
+          || postLikeCounterDelta(postId)
+        );
+      allow delete: if signedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if validCommentDocument();
+        allow update: if false;
+        allow delete: if signedIn()
+          && (
+            resource.data.uid == request.auth.uid
+            || parentPostOwner(postId)
+            || isAdmin()
+          );
+      }
+
+      match /likes/{uid} {
+        allow read: if true;
+        allow create: if createsPostLike(postId, uid);
+        allow delete: if deletesPostLike(postId, uid);
+        allow update: if false;
+      }
+    }
+
+    match /trading_journal/{journalId} {
+      allow read: if resource.data.isPublic == true || (signedIn() && resource.data.uid == request.auth.uid) || isAdmin();
+      allow create: if validJournalDocument();
+      allow update: if signedIn()
+        && (
+          ((resource.data.uid == request.auth.uid || isAdmin()) && preservesOwnerUid() && preservesLikeCounter() && validJournalEdit())
+          || journalLikeCounterDelta(journalId)
+        );
+      allow delete: if signedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+
+      match /comments/{commentId} {
+        allow read: if parentJournalPublic(journalId) || parentJournalOwner(journalId) || isAdmin();
+        allow create: if validCommentDocument() && parentJournalPublic(journalId);
+        allow update: if false;
+        allow delete: if signedIn()
+          && (
+            resource.data.uid == request.auth.uid
+            || parentJournalOwner(journalId)
+            || isAdmin()
+          );
+      }
+
+      match /likes/{uid} {
+        allow read: if true;
+        allow create: if createsJournalLike(journalId, uid) && parentJournalPublic(journalId);
+        allow delete: if deletesJournalLike(journalId, uid) && parentJournalPublic(journalId);
+        allow update: if false;
+      }
+    }
+
+    match /market_analyses/{analysisId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if validCommentDocument();
+        allow update: if false;
+        allow delete: if signedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+      }
+    }
+  }
+}

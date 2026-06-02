@@ -1,0 +1,17 @@
+{
+  "name": "우기의 주식",
+  "short_name": "우기주식",
+  "description": "AI 포착, 추천주, 관심종목, 매매일지, 커뮤니티를 한 화면에서 보는 반응형 주식 웹앱",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#f7f8fa",
+  "theme_color": "#f7f8fa",
+  "icons": [
+    {
+      "src": "assets/icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

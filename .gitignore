@@ -1,0 +1,14 @@
+.DS_Store
+__pycache__/
+*.pyc
+.venv/
+.env
+data/*.db
+data/*.sqlite
+data/*.sqlite3
+logs/
+.pytest_cache/
+config.local.js
+screenshots/
+functions/node_modules/
+functions/.env
