@@ -3673,6 +3673,104 @@ th {
   background: var(--surface-2);
 }
 
+.route-profile .profile-auth-grid {
+  max-width: 860px;
+  gap: 10px;
+}
+
+.route-profile .profile-auth-grid .panel {
+  min-width: 0;
+  border-radius: 14px;
+}
+
+.route-profile .profile-auth-grid .panel-head {
+  min-height: 46px;
+}
+
+.route-profile .profile-auth-grid .panel-body {
+  padding-top: 12px;
+  padding-bottom: 14px;
+}
+
+.route-profile .profile-summary-grid {
+  gap: 1px;
+  overflow: hidden;
+  max-width: 860px;
+  background: var(--line);
+  border-radius: 14px;
+}
+
+.route-profile .profile-summary-grid .metric,
+.route-profile .profile-summary-grid .kpi {
+  border: 0;
+  background: var(--surface);
+}
+
+.route-profile .profile-control-split {
+  grid-template-columns: minmax(0, 1fr) 314px;
+  max-width: 860px;
+  gap: 10px;
+}
+
+.route-profile .grid-2.section {
+  max-width: 860px;
+  gap: 10px;
+}
+
+.route-profile .input,
+.route-profile .textarea {
+  background: var(--surface-2);
+}
+
+.route-profile .form {
+  gap: 8px;
+}
+
+.route-profile .list-row,
+.route-community .list-row,
+.route-notices .list-row,
+.route-notice .list-row {
+  padding-right: 0;
+  padding-left: 0;
+}
+
+.route-community .split {
+  grid-template-columns: minmax(0, 1fr) 314px;
+  gap: 10px;
+}
+
+.route-community .post-card {
+  padding: 16px 0;
+}
+
+.route-community .post-card > .row-between {
+  align-items: flex-start;
+}
+
+.route-community .post-card .actions-wrap {
+  flex: 0 0 190px;
+}
+
+.route-community .post-card .form .row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 54px;
+}
+
+.route-community .post-card .input {
+  min-height: 36px;
+  background: var(--surface-2);
+}
+
+.route-community .stack > .empty,
+.route-favorites .empty,
+.route-journal .empty,
+.route-portfolio .empty,
+.route-ai .empty {
+  border-style: solid;
+  padding: 18px;
+  background: var(--surface-2);
+}
+
 .kpi,
 .metric {
   border-radius: 0;
@@ -4032,6 +4130,73 @@ th {
   background: #17171c;
 }
 
+.auth-gate {
+  max-width: 760px;
+  margin-top: 18px;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.auth-gate .panel-body {
+  padding: 8px;
+}
+
+.auth-gate-main {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  min-height: 92px;
+  padding: 14px;
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.auth-gate-main strong {
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.auth-gate-main .subtext {
+  margin-top: 4px;
+}
+
+.auth-gate-preview {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  margin-top: 8px;
+  border-radius: 10px;
+  background: var(--line);
+}
+
+.auth-gate-preview div {
+  display: grid;
+  gap: 5px;
+  min-height: 70px;
+  align-content: center;
+  padding: 12px;
+  background: var(--surface);
+}
+
+.auth-gate-preview span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.auth-gate-preview b {
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.auth-gate + .empty {
+  display: none;
+}
+
 button[data-action="refresh-prices"],
 button[data-action="refresh-brief"],
 button[data-action="refresh-fmkorea"],
@@ -4245,6 +4410,72 @@ button[data-action="refresh-portfolio"] {
 
   .panel .card {
     padding: 12px;
+  }
+
+  .profile-auth-grid,
+  .route-profile .profile-summary-grid,
+  .route-profile .profile-control-split,
+  .route-profile .grid-2.section,
+  .route-community .split {
+    max-width: none;
+  }
+
+  .route-profile .profile-auth-grid,
+  .route-profile .profile-control-split,
+  .route-profile .grid-2.section,
+  .route-community .split {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .route-profile .profile-summary-grid {
+    grid-template-columns: repeat(3, minmax(116px, 1fr));
+    margin-right: -16px;
+    padding-right: 16px;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+  }
+
+  .route-profile .profile-summary-grid::-webkit-scrollbar {
+    display: none;
+  }
+
+  .route-profile .profile-summary-grid .metric,
+  .route-profile .profile-summary-grid .kpi {
+    scroll-snap-align: start;
+  }
+
+  .auth-gate {
+    max-width: none;
+  }
+
+  .auth-gate-main {
+    grid-template-columns: 36px minmax(0, 1fr);
+    min-height: 0;
+    padding: 13px;
+  }
+
+  .auth-gate-main .btn {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .auth-gate-preview {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-gate-preview div {
+    min-height: 54px;
+  }
+
+  .route-community .post-card > .row-between {
+    display: grid;
+    gap: 10px;
+  }
+
+  .route-community .post-card .actions-wrap {
+    justify-content: flex-start;
+    flex: 0 1 auto;
   }
 
   .grid-3 .metric {
@@ -4774,6 +5005,10 @@ button[data-action="refresh-portfolio"] {
     gap: 10px;
     min-height: 0;
     padding: 12px 0;
+  }
+
+  .capture-board {
+    overflow: hidden;
   }
 
   .route-capture .tabs {

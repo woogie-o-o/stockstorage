@@ -4720,7 +4720,7 @@ function renderCommunity() {
     <div class="split">
       <section class="panel">
         <div class="panel-head"><h2>게시글</h2>${blockedCount ? `<span class="badge warn">차단 숨김 ${blockedCount}</span>` : ""}</div>
-        <div class="panel-body feed">${posts.map(renderCommunityPost).join("") || `<div class="empty">표시할 게시글이 없습니다.</div>`}</div>
+        <div class="panel-body feed">${posts.map((post) => renderCommunityPost(post, { compact: true })).join("") || `<div class="empty">표시할 게시글이 없습니다.</div>`}</div>
       </section>
       <aside class="stack">
         <section class="panel">
@@ -4773,11 +4773,12 @@ function isFollowingPostAuthor(uidValue) {
   return Boolean(state.user && uidValue && getUserDoc().postAuthorFollows?.[uidValue]?.enabled);
 }
 
-function renderCommunityPost(post) {
+function renderCommunityPost(post, options = {}) {
   const comments = commentsForPost(post.id);
   const liked = hasLikedPost(post.id);
   const own = canEditPost(post);
   const manageable = canManagePost(post);
+  const compact = Boolean(options.compact);
   return `
     <article class="card post-card" data-post-id="${escapeHtml(post.id)}">
       <div class="row-between">
@@ -4795,11 +4796,13 @@ function renderCommunityPost(post) {
         </div>
       </div>
       ${renderPostBody(post)}
-      <div class="comment-list">${comments.map((comment) => renderComment(comment, { target: `post-comment:${post.id}:${comment.id}`, postId: post.id, postUid: post.uid })).join("")}</div>
-      <form class="form" data-form="post-comment">
-        <input type="hidden" name="postId" value="${escapeHtml(post.id)}" />
-        <div class="row"><input class="input" name="content" placeholder="댓글" /><button class="btn" ${state.user ? "" : "disabled"}>등록</button></div>
-      </form>
+      ${compact ? "" : `
+        <div class="comment-list">${comments.map((comment) => renderComment(comment, { target: `post-comment:${post.id}:${comment.id}`, postId: post.id, postUid: post.uid })).join("")}</div>
+        <form class="form" data-form="post-comment">
+          <input type="hidden" name="postId" value="${escapeHtml(post.id)}" />
+          <div class="row"><input class="input" name="content" placeholder="댓글" /><button class="btn" ${state.user ? "" : "disabled"}>등록</button></div>
+        </form>
+      `}
     </article>
   `;
 }
@@ -5027,7 +5030,7 @@ function renderProfile() {
   if (!state.user) {
     return `
       ${renderPageHead("Account", "이메일 로그인", "간편 로그인 없이 이메일 회원가입/로그인만 제공합니다.")}
-      <div class="grid grid-2">
+      <div class="grid grid-2 profile-auth-grid">
         <section class="panel">
           <div class="panel-head"><h2>로그인</h2></div>
           <div class="panel-body">
@@ -5059,12 +5062,12 @@ function renderProfile() {
     .flatMap(([postId, comments]) => comments.filter((comment) => comment.uid === state.user.uid).map((comment) => ({ ...comment, postId })));
   return `
     ${renderPageHead("Profile", "프로필", `${state.user.email} · ${state.user.provider}`, `<button class="btn" data-action="route" data-route="portfolio">보유 현황</button><button class="btn" data-action="route" data-route="my-posts">내 글</button><button class="btn" data-action="route" data-route="my-comments">내 댓글</button><button class="btn" data-action="logout">로그아웃</button>`)}
-    <div class="grid grid-3">
+    <div class="grid grid-3 profile-summary-grid">
       ${renderKpiCard("레벨", `Lv.${progress.level}`, `${progress.score} XP`, "good")}
       ${renderKpiCard("게시글", `${doc.postCount || 0}개`, "공개 일지 포함", "")}
       ${renderKpiCard("댓글", `${doc.commentCount || 0}개`, "커뮤니티 활동", "")}
     </div>
-    <div class="split section">
+    <div class="split section profile-control-split">
       <section class="panel">
         <div class="panel-head"><h2>닉네임</h2></div>
         <div class="panel-body">
@@ -5286,9 +5289,32 @@ function renderMarketAnalysisForm(id = "") {
 }
 
 function authRequired(title) {
+  const previews = {
+    "관심종목": ["일반 관심종목", "관심 추천주", "가격 알림"],
+    "매매일지": ["매수/매도 기록", "손익 차트", "공개 공유"],
+    "매매일지 차트": ["기간별 손익", "종목 필터", "실현손익"],
+    "보유 현황": ["평가금액", "수익률", "종목별 메모"],
+    "AI 분석": ["근거 리포트", "DART 재무", "차트 판단"],
+    "내 글": ["작성글", "댓글", "활동 기록"],
+    "내 댓글": ["커뮤니티 댓글", "일지 댓글", "추천주 댓글"]
+  }[title] || ["개인 기록", "동기화", "내 데이터"];
   return `
     ${renderPageHead(title, `${title} 기능은 로그인이 필요합니다`, "이메일 로그인 또는 회원가입 후 사용할 수 있습니다.", `<button class="btn primary" data-action="route" data-route="profile">로그인</button>`)}
-    <div class="empty">Firebase 설정이 없는 로컬 환경에서도 이메일 계정을 만들면 기능 흐름을 검증할 수 있습니다.</div>
+    <section class="panel auth-gate">
+      <div class="panel-body">
+        <div class="auth-gate-main">
+          <span class="side-avatar ai">ID</span>
+          <div>
+            <strong>내 데이터로만 표시됩니다</strong>
+            <p class="subtext">로그인하면 Firebase UID 기준으로 저장된 ${escapeHtml(title)} 데이터만 불러옵니다. 로컬 계정으로도 기능 흐름을 검증할 수 있습니다.</p>
+          </div>
+          <button class="btn primary" data-action="route" data-route="profile">로그인</button>
+        </div>
+        <div class="auth-gate-preview">
+          ${previews.map((item) => `<div><span>${escapeHtml(item)}</span><b>대기</b></div>`).join("")}
+        </div>
+      </div>
+    </section>
   `;
 }
 
