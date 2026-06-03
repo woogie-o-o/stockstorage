@@ -276,6 +276,19 @@ a {
   gap: 8px;
 }
 
+.top-sync-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .right-panel {
   position: sticky;
   top: 0;
@@ -1526,6 +1539,10 @@ canvas {
 
   .top-actions {
     margin-left: 0;
+  }
+
+  .top-sync-pill {
+    display: none;
   }
 
   .content {
@@ -4082,6 +4099,10 @@ button[data-action="refresh-portfolio"] {
     order: 2;
     margin-left: auto;
     flex: 0 0 auto;
+  }
+
+  .top-sync-pill {
+    display: none;
   }
 
   .global-search {

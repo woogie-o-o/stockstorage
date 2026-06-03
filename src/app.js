@@ -1890,6 +1890,7 @@ function render() {
             <input name="q" value="${escapeHtml(state.filters.captureSearch)}" placeholder="종목명 또는 티커를 검색하세요" autocomplete="off" />
           </form>
           <div class="top-actions">
+            <span class="top-sync-pill">자동 동기화</span>
             ${state.user ? `<button class="btn primary" data-action="route" data-route="profile">${escapeHtml(state.user.nickname)}</button>` : `<button class="btn primary" data-action="route" data-route="profile">로그인</button>`}
           </div>
         </header>
