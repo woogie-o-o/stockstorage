@@ -2683,9 +2683,72 @@ body {
 
 .decision-metrics {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
   gap: 8px;
   margin-top: 16px;
+}
+
+.four-axis-panel {
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.four-axis-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.axis-card {
+  min-height: 116px;
+  padding: 14px 14px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+
+.axis-card.good {
+  border-color: color-mix(in srgb, #0bbf8c 28%, var(--line));
+  background: color-mix(in srgb, #0bbf8c 8%, var(--surface));
+}
+
+.axis-card.warn {
+  border-color: color-mix(in srgb, #ff4055 26%, var(--line));
+  background: color-mix(in srgb, #ff4055 7%, var(--surface));
+}
+
+.axis-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.axis-card-top strong {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.axis-card-top span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.axis-card > b {
+  display: block;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.axis-card > p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .right-panel.collapsed {
@@ -4095,6 +4158,23 @@ button[data-action="refresh-portfolio"] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 6px;
     margin-top: 12px;
+  }
+
+  .four-axis-panel {
+    margin: 0 -16px;
+    border-radius: 0;
+    border-left: 0;
+    border-right: 0;
+  }
+
+  .four-axis-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .axis-card {
+    min-height: 104px;
+    padding: 12px;
   }
 
   .route-stock .stock-detail-tabs,

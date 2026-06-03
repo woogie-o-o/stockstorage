@@ -66,6 +66,8 @@ assert(scanner.source === "Naver Finance Scanner" && scanner.items?.length >= 1,
 assert(scanner.items.every((item) => Number(item.score) >= 0 && item.tradePlan?.stopPrice < item.tradePlan?.entryPrice), "Scanner trade plan failed", scanner);
 assert(scanner.items.every((item) => Number(item.tradePlan?.riskReward) >= 1.5 && item.tradePlan?.response && item.tradePlan?.positionGuide), "Scanner risk reward failed", scanner);
 assert(scanner.items.every((item) => item.decision?.priority && item.decision?.falseBreakoutRisk && Number(item.factors?.finalBuy) >= 0), "Scanner decision fields failed", scanner);
+assert(scanner.items.every((item) => item.factors?.fourAxis?.trend && item.factors?.fourAxis?.volume && Number(item.factors?.fourAxis?.signalStars) > 0), "Scanner four-axis fields failed", scanner);
+assert(scanner.items.every((item) => item.tradePlan?.marketGate?.regime && Number(item.tradePlan?.positionGuide?.riskScale) > 0 && item.tradePlan?.positionGuide?.sizingReason), "Scanner position sizing fields failed", scanner);
 assert(samsungFiveYearHistory.source === "Naver Finance" && samsungFiveYearHistory.points?.length > 1000, "Samsung five year history failed", samsungFiveYearHistory);
 if (fmkorea.available) {
   assert(Number(fmkorea.latestCount) > 0 && fmkorea.series?.length >= 1, "FMKorea scrape data failed", fmkorea);
@@ -133,7 +135,13 @@ console.log(JSON.stringify({
     source: scanner.source,
     universeCount: scanner.universeCount,
     scoredCount: scanner.scoredCount,
-    items: scanner.items.map((item) => ({ ticker: item.ticker, score: item.score, pattern: item.pattern }))
+    items: scanner.items.map((item) => ({
+      ticker: item.ticker,
+      score: item.score,
+      pattern: item.pattern,
+      gate: item.tradePlan?.marketGate?.regime,
+      axis: item.factors?.fourAxis?.signalStars
+    }))
   },
   aapl: {
     search: aaplSearch.items[0],

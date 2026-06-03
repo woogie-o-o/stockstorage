@@ -554,7 +554,16 @@ def parse_kis_night_futures_tick(message: str, symbol: str) -> dict | None:
     }
 
 
-def fetch_kis_night_futures_tick(symbol: str, timeout: int = 18) -> dict:
+def kis_night_futures_timeout() -> int:
+    raw = os.environ.get("WOOGI_KIS_NIGHT_FUTURES_TIMEOUT") or os.environ.get("KIS_NIGHT_FUTURES_TIMEOUT") or "6"
+    try:
+        return max(2, min(int(float(raw)), 18))
+    except ValueError:
+        return 6
+
+
+def fetch_kis_night_futures_tick(symbol: str, timeout: int | None = None) -> dict:
+    timeout = timeout or kis_night_futures_timeout()
     app_key, app_secret = kis_credentials()
     if not app_key or not app_secret:
         raise ValueError("KIS keys missing")
@@ -668,7 +677,7 @@ def collect_night_futures() -> dict:
     if configured and session.get("active") and not snapshot.get("price"):
         symbol = str(snapshot.get("symbol") or get_night_futures_symbol())
         try:
-            live_tick = fetch_kis_night_futures_tick(symbol)
+            live_tick = fetch_kis_night_futures_tick(symbol, timeout=kis_night_futures_timeout())
             now = kst_now().isoformat(timespec="seconds")
             live_tick = {**live_tick, "time": now, "symbol": symbol, "source": "KIS OpenAPI"}
             history.append(live_tick)

@@ -144,20 +144,183 @@ def _priority_label(score: float, rr: float, false_breakout_score: float, chase_
     return "C"
 
 
-def _position_guide(entry: float, stop: float, market: str) -> dict:
+def _axis_stars(score: float) -> int:
+    score = _clamp(score)
+    if score >= 82:
+        return 5
+    if score >= 64:
+        return 4
+    if score >= 46:
+        return 3
+    if score >= 28:
+        return 2
+    if score > 0:
+        return 1
+    return 0
+
+
+def _axis_label(stars: int) -> str:
+    labels = {
+        5: "강한 컨펌",
+        4: "우호",
+        3: "중립",
+        2: "약함",
+        1: "위험",
+        0: "판단 불가",
+    }
+    return labels.get(stars, "판단 불가")
+
+
+def _axis_payload(name: str, score: float, verdict: str, evidence: list[str]) -> dict:
+    stars = _axis_stars(score)
+    return {
+        "name": name,
+        "score": stars,
+        "scorePct": round(_clamp(score), 1),
+        "label": _axis_label(stars),
+        "verdict": verdict,
+        "evidence": evidence[:3],
+    }
+
+
+def _four_axis_snapshot(
+    *,
+    current: float,
+    ma20: float,
+    ma60: float,
+    ma120: float,
+    ret_1m: float,
+    ret_3m: float,
+    volume_ratio: float,
+    annual_volatility: float,
+    trend_score: float,
+    momentum_score: float,
+    breakout_score: float,
+    liquidity_score: float,
+    chase_risk_score: float,
+    false_breakout_score: float,
+    pct_from_high: float,
+    rsi: float,
+    macd: dict,
+    bb_width_rank: float,
+    obv_slope: float,
+    above_vwap: bool,
+) -> dict:
+    trend_verdict = "정배열 추세 우위" if ma20 > ma60 > ma120 and current > ma20 else "상승 추세 유지" if current > ma20 and ma20 >= ma60 else "방향 확인"
+    momentum_verdict = "모멘텀 양호" if rsi >= 55 and macd.get("aboveSignal") else "과열 경계" if rsi >= 72 else "모멘텀 확인 중"
+    volatility_score = _clamp(
+        70
+        - max(0.0, annual_volatility - 34.0) * 0.75
+        - max(0.0, false_breakout_score - 55.0) * 0.35
+        + (12 if bb_width_rank <= 25 and momentum_score >= 55 else 0)
+        - (8 if bb_width_rank >= 88 and chase_risk_score >= 60 else 0)
+    )
+    volatility_verdict = "스퀴즈 후 방향 대기" if bb_width_rank <= 25 else "변동성 확장 경계" if annual_volatility >= 48 or bb_width_rank >= 82 else "변동성 관리 가능"
+    volume_score = _clamp(
+        liquidity_score * 0.35
+        + breakout_score * 0.35
+        + (15 if obv_slope > 0 else -8)
+        + (10 if above_vwap else -8)
+        + _clamp(volume_ratio - 1.0, -0.5, 3.0) * 8
+    )
+    volume_verdict = "거래량·수급 동시 컨펌" if volume_ratio >= 1.5 and obv_slope > 0 and above_vwap else "수급 확인 필요" if not above_vwap or obv_slope < 0 else "거래량 관찰"
+
+    if bb_width_rank <= 22 and momentum_score >= 55:
+        phase = f"브레이크아웃 대기 — BB폭 {bb_width_rank:.0f}% 분위, 방향 확인"
+    elif pct_from_high >= -3 and trend_score >= 70:
+        phase = f"신고가권 접근 — 52주 고점 대비 {pct_from_high:+.1f}%"
+    elif chase_risk_score >= 70:
+        phase = "고점 부근 경계 — 추격보다 눌림목 확인"
+    elif trend_score >= 70 and momentum_score >= 65 and volume_score >= 65:
+        phase = "강한 상승 — 추세·모멘텀·수급 동시 우위"
+    elif trend_score >= 62 and momentum_score < 60:
+        phase = "상승 추세 조정 — 모멘텀 재가속 확인"
+    elif trend_score < 46:
+        phase = "방향성 부족 — 신규 진입 보류"
+    else:
+        phase = "선별 관찰 — 조건 충족 여부 확인"
+
+    axes = {
+        "trend": _axis_payload("추세", trend_score, trend_verdict, [
+            f"현재가/MA20 { _return_pct(current, ma20):+.1f}%",
+            "MA20>MA60" if ma20 > ma60 else "MA20<=MA60",
+            f"3개월 {ret_3m:+.1f}%",
+        ]),
+        "momentum": _axis_payload("모멘텀", momentum_score, momentum_verdict, [
+            f"RSI {rsi:.1f}",
+            "MACD 신호선 위" if macd.get("aboveSignal") else "MACD 신호 확인 중",
+            f"1개월 {ret_1m:+.1f}%",
+        ]),
+        "volatility": _axis_payload("변동성", volatility_score, volatility_verdict, [
+            f"연환산 변동성 {annual_volatility:.1f}%",
+            f"BB폭 분위 {bb_width_rank:.0f}%",
+            f"허위돌파 {false_breakout_score:.0f}점",
+        ]),
+        "volume": _axis_payload("거래량·수급", volume_score, volume_verdict, [
+            f"거래량 {volume_ratio:.1f}배",
+            "VWAP 위" if above_vwap else "VWAP 아래",
+            "OBV 우상향" if obv_slope > 0 else "OBV 둔화",
+        ]),
+    }
+    signal_stars = round(sum(axis["score"] for axis in axes.values()) / 4, 1)
+    weak_axes = [axis["name"] for axis in axes.values() if axis["score"] <= 2]
+    return {
+        **axes,
+        "phase": phase,
+        "signalStars": signal_stars,
+        "keyObservation": " · ".join([phase, f"4축 평균 {signal_stars:.1f}/5"]),
+        "riskPoint": "취약 축: " + ", ".join(weak_axes) if weak_axes else "4축에서 큰 결함은 제한적",
+    }
+
+
+def _risk_gate(annual_volatility: float, chase_risk_score: float, false_breakout_score: float, rr: float) -> dict:
+    risk_score = _clamp(
+        annual_volatility * 0.65
+        + chase_risk_score * 0.45
+        + false_breakout_score * 0.35
+        - max(0.0, rr - 1.5) * 8
+    )
+    if risk_score >= 68:
+        regime, scale, label = "Risk-Off", 0.5, "신규 진입 보수적"
+    elif risk_score >= 46:
+        regime, scale, label = "Neutral", 0.75, "선별·축소 진입"
+    else:
+        regime, scale, label = "Risk-On", 1.0, "표준 리스크 가능"
+    return {
+        "regime": regime,
+        "label": label,
+        "riskScore": round(risk_score, 1),
+        "riskScale": scale,
+        "reason": (
+            f"종목 변동성 {annual_volatility:.1f}%, 추격 위험 {chase_risk_score:.0f}점, "
+            f"허위돌파 위험 {false_breakout_score:.0f}점 기준"
+        ),
+        "source": "scanner volatility gate",
+    }
+
+
+def _position_guide(entry: float, stop: float, market: str, gate: dict | None = None, target: float | None = None) -> dict:
     equity = 10_000_000 if market in {"KS", "KQ"} else 10_000
-    risk_pct = 1.0
+    gate = gate or {}
+    risk_scale = float(gate.get("riskScale") or 1.0)
+    risk_pct = round(1.0 * risk_scale, 2)
     risk_amount = equity * risk_pct / 100
     per_share_risk = max(0.0, entry - stop)
     quantity = math.floor(risk_amount / per_share_risk) if per_share_risk > 0 else 0
     notional = quantity * entry
+    rr = (target - entry) / per_share_risk if target and target > entry and per_share_risk > 0 else None
     return {
-        "basis": "가상 1회 리스크 1%",
+        "basis": f"가상 1회 리스크 {risk_pct:g}%",
         "assumedEquity": round(equity),
         "riskPct": risk_pct,
+        "riskScale": risk_scale,
         "riskAmount": round(risk_amount),
         "quantity": quantity,
         "notional": round(notional),
+        "perShareRisk": round(per_share_risk),
+        "sizingGrade": gate.get("label") or "표준 리스크 가능",
+        "sizingReason": gate.get("reason") or "기본 리스크 1% 기준",
+        "rMultipleTarget": round(rr, 2) if rr is not None else None,
     }
 
 
@@ -284,6 +447,29 @@ def build_scanner_feature(stock: dict, points: list[dict]) -> dict | None:
     risk_level = "높음" if chase_risk_score >= 65 else "보통" if chase_risk_score >= 42 else "낮음"
     false_breakout_risk = _risk_label(false_breakout_score)
     candidate_priority = _priority_label(score, rr, false_breakout_score, chase_risk_score)
+    four_axis = _four_axis_snapshot(
+        current=current,
+        ma20=ma20,
+        ma60=ma60,
+        ma120=ma120,
+        ret_1m=ret_1m,
+        ret_3m=ret_3m,
+        volume_ratio=volume_ratio,
+        annual_volatility=annual_volatility,
+        trend_score=trend_score,
+        momentum_score=momentum_score,
+        breakout_score=breakout_score,
+        liquidity_score=liquidity_score,
+        chase_risk_score=chase_risk_score,
+        false_breakout_score=false_breakout_score,
+        pct_from_high=pct_from_high,
+        rsi=rsi,
+        macd=macd,
+        bb_width_rank=bb_width_rank,
+        obv_slope=obv_slope,
+        above_vwap=above_vwap,
+    )
+    market_gate = _risk_gate(annual_volatility, chase_risk_score, false_breakout_score, rr)
     if chase_risk_score >= 70:
         response = "추격 금지, 눌림목 대기"
     elif false_breakout_score >= 65:
@@ -301,7 +487,7 @@ def build_scanner_feature(stock: dict, points: list[dict]) -> dict | None:
         f"{pattern}: 추세 {trend_score:.0f}, 모멘텀 {momentum_score:.0f}, 돌파 {breakout_score:.0f}. "
         f"20일 대비 거래량 {volume_ratio:.1f}배, 52주 고점 대비 {pct_from_high:+.1f}%. "
         f"추격 위험 {risk_level}, 허위돌파 위험 {false_breakout_risk}. "
-        f"대응은 {response}."
+        f"{four_axis['phase']}. 대응은 {response}."
     )
     return {
         "id": f"scan_{market}_{ticker}",
@@ -339,6 +525,7 @@ def build_scanner_feature(stock: dict, points: list[dict]) -> dict | None:
             "vwap20": round(vwap20),
             "volatility": round(annual_volatility, 1),
             "pctFrom52WeekHigh": round(pct_from_high, 1),
+            "fourAxis": four_axis,
         },
         "tradePlan": {
             "entryPrice": round(entry_price),
@@ -351,8 +538,10 @@ def build_scanner_feature(stock: dict, points: list[dict]) -> dict | None:
             "stopPct": round((risk_amount_per_share / entry_price) * 100, 2) if entry_price > 0 else 0.0,
             "riskLevel": risk_level,
             "response": response,
-            "positionGuide": _position_guide(entry_price, stop_price, market),
+            "marketGate": market_gate,
+            "positionGuide": _position_guide(entry_price, stop_price, market, market_gate, target_price),
         },
+        "marketGate": market_gate,
         "decision": {
             "priority": candidate_priority,
             "buyAttractiveness": _label_score(score),
@@ -360,5 +549,6 @@ def build_scanner_feature(stock: dict, points: list[dict]) -> dict | None:
             "falseBreakoutRisk": false_breakout_risk,
             "summary": f"{candidate_priority}등급 후보 · 손익비 {rr:.1f}R · {response}",
             "confirmation": "거래량이 20일 평균 이상 유지되고 종가가 관찰가 위에서 마감하는지 확인",
+            "fourAxisSummary": four_axis["keyObservation"],
         },
     }

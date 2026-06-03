@@ -35,14 +35,25 @@ assert feature["volumeRatio"] >= 2.9
 assert feature["tradePlan"]["stopPrice"] < feature["tradePlan"]["entryPrice"] < feature["tradePlan"]["targetPrice"]
 assert feature["tradePlan"]["riskReward"] >= 2
 assert feature["tradePlan"]["positionGuide"]["riskPct"] == 1.0
+assert feature["tradePlan"]["positionGuide"]["riskScale"] == 1.0
+assert feature["tradePlan"]["positionGuide"]["sizingReason"]
+assert feature["tradePlan"]["marketGate"]["regime"] in {"Risk-On", "Neutral", "Risk-Off"}
 assert feature["tradePlan"]["response"]
 assert 0 <= feature["factors"]["chaseRisk"] <= 100
 assert 0 <= feature["factors"]["falseBreakoutRisk"] <= 100
 assert 0 <= feature["factors"]["finalBuy"] <= 100
 assert 0 <= feature["factors"]["profit"] <= 100
 assert feature["factors"]["riskReward"] >= 2
+four_axis = feature["factors"]["fourAxis"]
+assert four_axis["signalStars"] >= 3
+for axis_key in ["trend", "momentum", "volatility", "volume"]:
+    assert axis_key in four_axis
+    assert 0 <= four_axis[axis_key]["score"] <= 5
+    assert four_axis[axis_key]["verdict"]
+    assert four_axis[axis_key]["evidence"]
 assert feature["decision"]["priority"] in {"A", "B", "C"}
 assert feature["decision"]["falseBreakoutRisk"] in {"낮음", "보통", "확인 필요", "높음"}
+assert feature["decision"]["fourAxisSummary"]
 
 assert build_scanner_feature(stock, make_points()[:30]) is None
 
@@ -55,4 +66,6 @@ print({
     "target": feature["tradePlan"]["targetPrice"],
     "rr": feature["tradePlan"]["riskReward"],
     "priority": feature["decision"]["priority"],
+    "gate": feature["tradePlan"]["marketGate"]["regime"],
+    "axis": feature["factors"]["fourAxis"]["signalStars"],
 })

@@ -2390,6 +2390,7 @@ function renderFeatureStockDetail() {
   const factors = feature.factors || {};
   const tradePlan = feature.tradePlan || {};
   const positionGuide = tradePlan.positionGuide || {};
+  const marketGate = tradePlan.marketGate || feature.marketGate || {};
   if (shouldLoadChartHistory(key, stockChartFrame, stockMinuteInterval)) {
     queueMicrotask(() => loadHistory(key, { silent: true, frame: stockChartFrame, interval: stockMinuteInterval }));
   }
@@ -2454,10 +2455,12 @@ function renderFeatureStockDetail() {
               ${renderKpi("손익비", renderFeatureRiskRewardText(feature))}
               ${renderKpi("허위돌파 위험", decision.falseBreakoutRisk || riskText(factors.falseBreakoutRisk))}
               ${renderKpi("추격 위험", riskText(factors.chaseRisk || 0), factors.chaseRisk >= 65 ? "warn" : "")}
+              ${renderKpi("리스크 게이트", marketGate.label || marketGate.regime || "표준 관찰", marketGate.regime === "Risk-Off" ? "warn" : "good")}
               ${renderKpi("권장 대응", tradePlan.response || "관찰 유지", "good")}
             </div>
           </div>
         </section>
+        ${renderFourAxisPanel(feature)}
         <nav class="stock-detail-tabs" aria-label="포착 종목 상세 탭">
           <button class="active" type="button">차트</button>
           <button type="button" data-action="open-stock" data-stock="${escapeHtml(key)}">종목</button>
@@ -2515,7 +2518,7 @@ function renderFeatureStockDetail() {
           <div class="panel-body stack">
             <div class="source-item"><strong>관찰가</strong><p class="subtext">${tradePlan.entryPrice ? `${fmtMoney(tradePlan.entryPrice, feature.market)} 위에서 종가와 거래량을 확인합니다.` : "관찰가 산정 대기"}</p></div>
             <div class="source-item"><strong>무효화</strong><p class="subtext">${tradePlan.stopPrice ? `${fmtMoney(tradePlan.stopPrice, feature.market)} 이탈 시 시나리오를 재검토합니다.` : "무효화 가격 산정 대기"}</p></div>
-            <div class="source-item"><strong>포지션 가이드</strong><p class="subtext">${positionGuide.quantity ? `${escapeHtml(positionGuide.basis || "가상 리스크 기준")} · ${fmtNum(positionGuide.quantity, 0)}주 · 노출 ${fmtMoney(positionGuide.notional, feature.market)}` : "계좌 규모 입력 전 참고용입니다."}</p></div>
+            <div class="source-item"><strong>포지션 가이드</strong><p class="subtext">${positionGuide.quantity ? `${escapeHtml(positionGuide.basis || "가상 리스크 기준")} · ${fmtNum(positionGuide.quantity, 0)}주 · 노출 ${fmtMoney(positionGuide.notional, feature.market)}` : "계좌 규모 입력 전 참고용입니다."}</p>${positionGuide.sizingReason ? `<p class="subtext tiny">${escapeHtml(positionGuide.sizingReason)}</p>` : ""}</div>
             <p class="subtext">특징주는 시장 데이터 기반 포착 정보이며, 매수·매도 권유가 아닙니다.</p>
           </div>
         </section>
@@ -2528,6 +2531,40 @@ function findFeatureStock(param) {
   const decoded = decodeURIComponent(param || "");
   const found = state.data.marketFeatures.find((item) => item.id === decoded || stockKey(item) === decoded || item.ticker === decoded);
   return found ? normalizeFeature(found) : null;
+}
+
+function renderFourAxisPanel(feature) {
+  const axis = feature?.factors?.fourAxis;
+  if (!axis || typeof axis !== "object") return "";
+  const axes = ["trend", "momentum", "volatility", "volume"]
+    .map((key) => axis[key])
+    .filter(Boolean);
+  if (!axes.length) return "";
+  const cards = axes.map((item) => {
+    const score = Number(item.score || 0);
+    const tone = score >= 4 ? "good" : score <= 2 ? "warn" : "";
+    const evidence = Array.isArray(item.evidence) ? item.evidence : [];
+    return `
+      <div class="axis-card ${tone}">
+        <div class="axis-card-top">
+          <strong>${escapeHtml(item.name || "-")}</strong>
+          <span>${fmtNum(score, 1)}/5</span>
+        </div>
+        <b>${escapeHtml(item.verdict || item.label || "판단 대기")}</b>
+        <p>${evidence.map(escapeHtml).join(" · ")}</p>
+      </div>
+    `;
+  }).join("");
+  return `
+    <section class="panel four-axis-panel">
+      <div class="panel-head"><h2>4축 분석</h2><span class="badge good">${axis.signalStars ? `${fmtNum(axis.signalStars, 1)}/5` : "분석"}</span></div>
+      <div class="panel-body stack">
+        <p class="subtext">${escapeHtml(axis.keyObservation || axis.phase || "추세, 모멘텀, 변동성, 수급을 함께 확인합니다.")}</p>
+        <div class="four-axis-grid">${cards}</div>
+        ${axis.riskPoint ? `<p class="subtext tiny">${escapeHtml(axis.riskPoint)}</p>` : ""}
+      </div>
+    </section>
+  `;
 }
 
 function findStockPick(param) {
