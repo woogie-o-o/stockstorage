@@ -4788,12 +4788,12 @@ button[data-action="refresh-portfolio"] {
   }
 
   .route-stock .split {
-    grid-template-columns: minmax(620px, 1fr) minmax(350px, 0.52fr) minmax(350px, 0.52fr);
+    grid-template-columns: minmax(0, 1fr) 295px 295px;
     gap: 14px;
   }
 
   .route-feature-stock .split {
-    grid-template-columns: minmax(700px, 1fr) minmax(360px, 0.55fr);
+    grid-template-columns: minmax(0, 1fr) 314px;
     gap: 14px;
   }
 
