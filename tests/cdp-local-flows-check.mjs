@@ -93,12 +93,22 @@ await send("Runtime.enable");
 await send("Page.enable");
 await navigate("#profile");
 await evaluate(`
-  (() => {
+  (async () => {
     localStorage.clear();
     sessionStorage.clear();
+    if (window.indexedDB) {
+      await new Promise((resolve) => {
+        const timer = setTimeout(() => resolve(false), 1000);
+        const request = indexedDB.deleteDatabase("firebaseLocalStorageDb");
+        request.onsuccess = request.onerror = request.onblocked = () => {
+          clearTimeout(timer);
+          resolve(true);
+        };
+      });
+    }
     return true;
   })()
-`);
+`, { awaitPromise: true });
 await send("Page.reload", { ignoreCache: true });
 await waitFor(`Boolean(document.querySelector("main"))`);
 await navigate("#profile");

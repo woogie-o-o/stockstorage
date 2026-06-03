@@ -76,6 +76,17 @@ const storageRules = read("firebase/storage.rules");
 const functionsIndex = read("functions/index.js");
 const functionsAnalysis = read("functions/analysis.js");
 
+const literalActions = [
+  ...new Set([...app.matchAll(/data-action=\"([^\"]+)\"/g)].map((match) => match[1]).filter((action) => !action.includes("$")))
+].sort();
+const handledActions = [
+  ...new Set([...app.matchAll(/action === \"([^\"]+)\"/g)].map((match) => match[1]))
+].sort();
+const missingActionHandlers = literalActions.filter((action) => !handledActions.includes(action));
+if (missingActionHandlers.length) {
+  throw new Error(`unhandled literal data-action(s): ${missingActionHandlers.join(", ")}`);
+}
+
 for (const text of [app, css, html, readme]) {
   for (const banned of [
     "google_mobile_ads",

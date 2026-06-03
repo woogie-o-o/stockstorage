@@ -4109,16 +4109,18 @@ function renderPortfolio() {
     <div class="split section">
       <section class="panel">
         <div class="panel-head"><h2>보유 중</h2><span class="badge">${holdings.length}개</span></div>
-        <div class="table-wrap">
-          <table class="responsive-table">
-            <thead><tr><th>종목</th><th>수량</th><th>평균단가</th><th>현재가</th><th>평가금액</th><th>손익</th><th>동작</th></tr></thead>
-            <tbody>${holdings.map(renderPortfolioRow).join("") || `<tr><td colspan="7"><div class="empty">매수 기록이 남은 종목이 없습니다.</div></td></tr>`}</tbody>
-          </table>
-        </div>
+        ${holdings.length ? `
+          <div class="table-wrap">
+            <table class="responsive-table">
+              <thead><tr><th>종목</th><th>수량</th><th>평균단가</th><th>현재가</th><th>평가금액</th><th>손익</th><th>동작</th></tr></thead>
+              <tbody>${holdings.map(renderPortfolioRow).join("")}</tbody>
+            </table>
+          </div>
+        ` : renderListEmpty("매수 기록이 남은 종목이 없습니다.", "매매일지에 매수 기록을 남기면 보유 종목과 평가손익이 자동으로 정리됩니다.", "기록 작성", `data-action="modal" data-modal="journal"`)}
       </section>
       <aside class="panel">
         <div class="panel-head"><h2>정리 완료</h2><span class="badge">${closed.length}개</span></div>
-        <div>${closed.slice(0, 12).map((item) => `<div class="list-row" data-action="open-stock" data-stock="${escapeHtml(item.key)}"><strong>${escapeHtml(item.stockName)}</strong><p class="subtext">${escapeHtml(item.ticker)} · 매수 ${fmtNum(item.buyQty, 2)} / 매도 ${fmtNum(item.sellQty, 2)} · 실현 ${fmtMoney(item.realized)}</p></div>`).join("") || `<div class="panel-body"><div class="empty">정리 완료된 종목이 없습니다.</div></div>`}</div>
+        <div>${closed.slice(0, 12).map((item) => `<div class="list-row" data-action="open-stock" data-stock="${escapeHtml(item.key)}"><strong>${escapeHtml(item.stockName)}</strong><p class="subtext">${escapeHtml(item.ticker)} · 매수 ${fmtNum(item.buyQty, 2)} / 매도 ${fmtNum(item.sellQty, 2)} · 실현 ${fmtMoney(item.realized)}</p></div>`).join("") || renderListEmpty("정리 완료된 종목이 없습니다.", "매도까지 기록된 종목은 이곳에서 따로 확인할 수 있습니다.")}</div>
       </aside>
     </div>
   `;
@@ -5478,6 +5480,7 @@ async function onClick(event) {
     state.filters.captureTab = actionEl.dataset.tab;
     render();
   }
+  if (action === "open-post") navigate("post", actionEl.dataset.post || "");
   if (action === "open-stock") await openStock(actionEl.dataset.stock);
   if (action === "open-investor-stock") await openInvestorFlowStock(actionEl.dataset);
   if (action === "open-fmkorea-stock") await openFmkoreaHotStock(actionEl.dataset);

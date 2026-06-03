@@ -377,12 +377,22 @@ a {
 
 .link-button {
   border: 0;
+  min-height: 30px;
+  border-radius: 8px;
+  padding: 0 8px;
   background: transparent;
   color: var(--accent-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font: inherit;
   font-size: 12px;
   font-weight: 800;
   cursor: pointer;
+}
+
+.link-button:hover {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
 }
 
 .side-list {
@@ -794,6 +804,7 @@ h3 {
 
 .table-wrap {
   width: 100%;
+  max-width: 100%;
   overflow-x: auto;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -3930,6 +3941,25 @@ th {
   width: 100%;
 }
 
+.panel > .table-wrap {
+  border-right: 0;
+  border-left: 0;
+  border-radius: 0;
+}
+
+.route-portfolio .panel,
+.route-journal .panel,
+.route-favorites .panel,
+.route-community .panel {
+  overflow: hidden;
+}
+
+.route-portfolio .table-wrap,
+.route-journal .table-wrap {
+  min-width: 0;
+  overflow-x: auto;
+}
+
 .route-markets table.responsive-table,
 .route-home table.responsive-table {
   min-width: 0;
@@ -3962,6 +3992,8 @@ th {
 .route-capture .tabs {
   flex-wrap: nowrap;
   overflow-x: auto;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .route-capture .tabs::-webkit-scrollbar {
@@ -3989,7 +4021,8 @@ th {
 }
 
 .capture-board {
-  overflow: visible;
+  min-width: 0;
+  overflow: hidden;
   background: var(--surface);
 }
 
