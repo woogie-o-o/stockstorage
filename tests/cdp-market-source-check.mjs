@@ -152,6 +152,36 @@ const stockCandle = await evaluate(`
     };
   })()
 `);
+const stockCandleZoom = await evaluate(`
+  (() => {
+    const chart = document.querySelector("canvas[data-chart='ohlc']");
+    const points = JSON.parse(chart.dataset.points || "[]").length;
+    const rect = chart.getBoundingClientRect();
+    chart.dispatchEvent(new WheelEvent("wheel", {
+      deltaY: -160,
+      clientX: rect.left + rect.width / 2,
+      clientY: rect.top + rect.height / 2,
+      bubbles: true,
+      cancelable: true
+    }));
+    const zoomed = {
+      start: Number(chart.dataset.viewStart),
+      end: Number(chart.dataset.viewEnd)
+    };
+    chart.dispatchEvent(new MouseEvent("dblclick", {
+      clientX: rect.left + rect.width / 2,
+      clientY: rect.top + rect.height / 2,
+      bubbles: true,
+      cancelable: true
+    }));
+    return {
+      points,
+      zoomed,
+      zoomedIn: Number.isInteger(zoomed.start) && Number.isInteger(zoomed.end) && zoomed.end - zoomed.start < points,
+      reset: !chart.dataset.viewStart && !chart.dataset.viewEnd
+    };
+  })()
+`);
 await evaluate(`document.querySelector('[data-action="stock-chart-mode"][data-mode="line"]').click(); true;`);
 await waitFor(`document.querySelector("canvas[data-chart='line']")?.dataset.values.split(",").length > 100`);
 const stockLineValues = await evaluate(`document.querySelector("canvas[data-chart='line']").dataset.values.split(",").length`);
@@ -225,8 +255,8 @@ if (!indexDetail.text.includes("Naver Finance") || indexDetail.chartValues < 100
 if (!stockDesktop.text.includes("현재가 출처") || !stockDesktop.text.includes("Naver Finance") || stockDesktop.chartValues < 100) {
   throw new Error(`Stock detail did not show real quote/chart sources: ${JSON.stringify(stockDesktop)}`);
 }
-if (stockDesktop.chartType !== "ohlc" || stockCandle.points < 100 || stockCandle.nonBlankPixels < 100 || !stockCandle.hasMovingAverages || stockLineValues < 100) {
-  throw new Error(`Stock detail OHLC/line toggle failed: ${JSON.stringify({ stockDesktop, stockCandle, stockLineValues })}`);
+if (stockDesktop.chartType !== "ohlc" || stockCandle.points < 100 || stockCandle.nonBlankPixels < 100 || !stockCandle.hasMovingAverages || !stockCandleZoom.zoomedIn || !stockCandleZoom.reset || stockLineValues < 100) {
+  throw new Error(`Stock detail OHLC/line toggle failed: ${JSON.stringify({ stockDesktop, stockCandle, stockCandleZoom, stockLineValues })}`);
 }
 if (!stockDesktop.text.includes("종목토론방") || !stockDesktop.text.includes("Naver Finance Board")) {
   throw new Error(`Stock detail did not show Naver discussion board source: ${JSON.stringify(stockDesktop)}`);
@@ -292,6 +322,7 @@ console.log(JSON.stringify({
     chartType: stockDesktop.chartType,
     candlePixels: stockCandle.nonBlankPixels,
     hasMovingAverages: stockCandle.hasMovingAverages,
+    wheelZoom: stockCandleZoom,
     lineValues: stockLineValues,
     hasQuoteSource: stockDesktop.text.includes("현재가 출처") && stockDesktop.text.includes("Naver Finance"),
     hasDisclosure: stockDesktop.text.includes("뉴스/공시/근거") && (stockDesktop.text.includes("OpenDART") || stockDesktop.text.includes("Naver Finance Notice")),
