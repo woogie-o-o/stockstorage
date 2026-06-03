@@ -182,6 +182,32 @@ const stockCandleZoom = await evaluate(`
     };
   })()
 `);
+const stockUi = await evaluate(`
+  (async () => {
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const visible = (el) => {
+      const rect = el.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    };
+    const orphanButtons = [...document.querySelectorAll("button")]
+      .filter((button) => visible(button) && !button.disabled && !button.hasAttribute("data-action") && !button.closest("form"))
+      .map((button) => button.textContent.trim())
+      .filter(Boolean);
+    const detailInfo = [...document.querySelectorAll(".stock-detail-tabs button")]
+      .find((button) => button.textContent.trim() === "종목정보");
+    detailInfo?.click();
+    await wait(350);
+    const activeDetail = document.querySelector(".stock-detail-tabs button.active")?.textContent.trim() || "";
+    const fundamentalsTop = Math.round(document.querySelector(".stock-fundamentals-panel")?.getBoundingClientRect().top ?? 9999);
+    const workMemo = [...document.querySelectorAll('.stock-work-tabs[aria-label="종목 작업 패널"] button')]
+      .find((button) => button.textContent.trim() === "메모");
+    workMemo?.click();
+    await wait(350);
+    const activeWork = document.querySelector('.stock-work-tabs[aria-label="종목 작업 패널"] button.active')?.textContent.trim() || "";
+    const memoTop = Math.round(document.querySelector(".stock-work-memo")?.getBoundingClientRect().top ?? 9999);
+    return { orphanButtons, activeDetail, fundamentalsTop, activeWork, memoTop };
+  })()
+`, { awaitPromise: true });
 await evaluate(`document.querySelector('[data-action="stock-chart-mode"][data-mode="line"]').click(); true;`);
 await waitFor(`document.querySelector("canvas[data-chart='line']")?.dataset.values.split(",").length > 100`);
 const stockLineValues = await evaluate(`document.querySelector("canvas[data-chart='line']").dataset.values.split(",").length`);
@@ -258,6 +284,9 @@ if (!stockDesktop.text.includes("현재가 출처") || !stockDesktop.text.includ
 if (stockDesktop.chartType !== "ohlc" || stockCandle.points < 100 || stockCandle.nonBlankPixels < 100 || !stockCandle.hasMovingAverages || !stockCandleZoom.zoomedIn || !stockCandleZoom.reset || stockLineValues < 100) {
   throw new Error(`Stock detail OHLC/line toggle failed: ${JSON.stringify({ stockDesktop, stockCandle, stockCandleZoom, stockLineValues })}`);
 }
+if (stockUi.orphanButtons.length || stockUi.activeDetail !== "종목정보" || stockUi.fundamentalsTop > 80 || stockUi.activeWork !== "메모" || stockUi.memoTop > 900) {
+  throw new Error(`Stock detail tab/work buttons are not fully interactive: ${JSON.stringify(stockUi)}`);
+}
 if (!stockDesktop.text.includes("종목토론방") || !stockDesktop.text.includes("Naver Finance Board")) {
   throw new Error(`Stock detail did not show Naver discussion board source: ${JSON.stringify(stockDesktop)}`);
 }
@@ -323,6 +352,7 @@ console.log(JSON.stringify({
     candlePixels: stockCandle.nonBlankPixels,
     hasMovingAverages: stockCandle.hasMovingAverages,
     wheelZoom: stockCandleZoom,
+    interactiveTabs: stockUi,
     lineValues: stockLineValues,
     hasQuoteSource: stockDesktop.text.includes("현재가 출처") && stockDesktop.text.includes("Naver Finance"),
     hasDisclosure: stockDesktop.text.includes("뉴스/공시/근거") && (stockDesktop.text.includes("OpenDART") || stockDesktop.text.includes("Naver Finance Notice")),

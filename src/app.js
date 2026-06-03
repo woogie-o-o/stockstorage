@@ -103,6 +103,9 @@ const state = {
     stockChartFrame: "day",
     stockMinuteInterval: "60m",
     stockChartRange: "1y",
+    stockDetailTab: "chart",
+    stockQuoteTab: "materials",
+    stockWorkTab: "analysis",
     indexChartFrame: "day",
     indexMinuteInterval: "60m",
     indexChartRange: "1y",
@@ -2505,7 +2508,7 @@ function renderFeatureStockDetail() {
         </section>
         ${renderFourAxisPanel(feature)}
         <nav class="stock-detail-tabs" aria-label="포착 종목 상세 탭">
-          <button class="active" type="button">차트</button>
+          <button class="active" type="button" data-action="scroll-stock-section" data-target=".stock-chart-panel">차트</button>
           <button type="button" data-action="open-stock" data-stock="${escapeHtml(key)}">종목</button>
           <button type="button" data-action="generate-ai" data-stock="${escapeHtml(key)}">AI 분석</button>
           <button type="button" data-action="route" data-route="compare" data-param="${escapeHtml(key)}">비교</button>
@@ -2521,7 +2524,7 @@ function renderFeatureStockDetail() {
             ${renderChartRangeControls("stock", stockChartFrame, stockChartRange)}
           </div>
         </section>
-        <section class="panel">
+        <section class="panel feature-info-panel">
           <div class="panel-head"><h2>포착 정보</h2><span class="badge">${escapeHtml(feature.pattern || feature.group || "AI")}</span></div>
           <div class="panel-body stack">
             <p class="subtext">${escapeHtml(localizedFeatureReason(feature))}</p>
@@ -2756,6 +2759,9 @@ function renderStockDetail() {
   const stockChartFrame = chartFrameId(state.filters.stockChartFrame);
   const stockMinuteInterval = minuteIntervalId(state.filters.stockMinuteInterval);
   const stockChartRange = chartRangeId(state.filters.stockChartRange);
+  const stockDetailTab = state.filters.stockDetailTab || "chart";
+  const stockQuoteTab = state.filters.stockQuoteTab || "materials";
+  const stockWorkTab = state.filters.stockWorkTab || "analysis";
   const historyCandles = applyChartRange(stockChartCandlesForFrame(stock, stockChartFrame, stockMinuteInterval), stockChartFrame, stockChartRange);
   const historyValues = chartValuesFromCandles(historyCandles);
   const chartHistoryKey = chartHistoryStoreKey(key, stockChartFrame, stockMinuteInterval);
@@ -2807,11 +2813,11 @@ function renderStockDetail() {
           </div>
         </section>
         <nav class="stock-detail-tabs" aria-label="종목 상세 탭">
-          <button class="active" type="button">차트</button>
-          <button type="button">시세</button>
-          <button type="button">내 주식</button>
-          <button type="button">종목정보</button>
-          <button type="button">커뮤니티</button>
+          <button class="${stockDetailTab === "chart" ? "active" : ""}" type="button" data-action="scroll-stock-section" data-tab="chart" data-target=".stock-chart-panel">차트</button>
+          <button class="${stockDetailTab === "quote" ? "active" : ""}" type="button" data-action="scroll-stock-section" data-tab="quote" data-target=".stock-quote-panel">시세</button>
+          <button class="${stockDetailTab === "mine" ? "active" : ""}" type="button" data-action="scroll-stock-section" data-tab="mine" data-target=".stock-work-panel">내 주식</button>
+          <button class="${stockDetailTab === "info" ? "active" : ""}" type="button" data-action="scroll-stock-section" data-tab="info" data-target=".stock-fundamentals-panel">종목정보</button>
+          <button class="${stockDetailTab === "community" ? "active" : ""}" type="button" data-action="scroll-stock-section" data-tab="community" data-target=".stock-discussion-panel, .stock-work-comments">커뮤니티</button>
         </nav>
         <section class="panel stock-chart-panel">
           <div class="panel-head wrap"><div><h2>차트</h2><p class="subtext">${escapeHtml(historyStamp)}</p></div><div class="row wrap"><div class="tabs compact"><button class="tab ${stockChartMode === "candles" ? "active" : ""}" data-action="stock-chart-mode" data-mode="candles">캔들</button><button class="tab ${stockChartMode === "line" ? "active" : ""}" data-action="stock-chart-mode" data-mode="line">라인</button></div></div></div>
@@ -2841,10 +2847,10 @@ function renderStockDetail() {
       <aside class="stock-quote-stack">
         <section class="panel stock-quote-panel">
           <div class="stock-work-tabs" aria-label="시세 패널">
-            <button type="button">시세</button>
-            <button type="button">수급</button>
-            <button class="active" type="button">재료</button>
-            <button class="stock-work-more" type="button">+</button>
+            <button class="${stockQuoteTab === "quote" ? "active" : ""}" type="button" data-action="scroll-stock-section" data-tab="quote" data-target=".stock-quote-panel">시세</button>
+            <button type="button" data-action="route" data-route="investor-flow">수급</button>
+            <button class="${stockQuoteTab === "materials" ? "active" : ""}" type="button" data-action="scroll-stock-section" data-tab="materials" data-target=".stock-sources-panel">재료</button>
+            <button class="stock-work-more" type="button" data-action="route" data-route="markets">+</button>
           </div>
           <div class="stock-quote-body">
             <div class="stock-live-price">
@@ -2867,7 +2873,7 @@ function renderStockDetail() {
             </div>
           </div>
         </section>
-        <section class="panel">
+        <section class="panel stock-fundamentals-panel">
           <div class="panel-head"><h2>재무지표</h2><span class="muted">${state.stockExtrasBusy.has(key) ? "자동 조회 중" : "자동 동기화"}</span></div>
           <div class="panel-body grid grid-4">
             ${renderKpi("PER", formatRatio(fundamentals.per))}
@@ -2880,7 +2886,7 @@ function renderStockDetail() {
             ${renderKpi("재무 출처", fundamentals.source?.includes("OpenDART") ? "DART" : (fundamentals.source || "-"))}
           </div>
         </section>
-        <section class="panel">
+        <section class="panel stock-sources-panel">
           <div class="panel-head"><h2>뉴스/공시/근거</h2></div>
           <div class="panel-body source-list">
             ${renderStockSources(stock, analysis, extras)}
@@ -2891,16 +2897,16 @@ function renderStockDetail() {
       <aside class="stock-side-stack">
         <section class="panel stock-work-panel">
           <div class="stock-work-tabs" aria-label="종목 작업 패널">
-            <button class="active" type="button">일반분석</button>
-            <button type="button">메모</button>
-            <button type="button">커뮤니티</button>
+            <button class="${stockWorkTab === "analysis" ? "active" : ""}" type="button" data-action="scroll-stock-section" data-tab="analysis" data-target=".stock-work-analysis">일반분석</button>
+            <button class="${stockWorkTab === "memo" ? "active" : ""}" type="button" data-action="scroll-stock-section" data-tab="memo" data-target=".stock-work-memo">메모</button>
+            <button class="${stockWorkTab === "comments" ? "active" : ""}" type="button" data-action="scroll-stock-section" data-tab="comments" data-target=".stock-work-comments">커뮤니티</button>
             <button class="stock-work-more" data-action="route" data-route="ai" type="button">+</button>
           </div>
           <div class="stock-work-body">
             <div class="stock-work-segment" aria-label="분석 유형">
-              <button class="active" type="button">AI</button>
-              <button type="button">메모</button>
-              <button type="button">댓글</button>
+              <button class="${stockWorkTab === "analysis" ? "active" : ""}" type="button" data-action="scroll-stock-section" data-tab="analysis" data-target=".stock-work-analysis">AI</button>
+              <button class="${stockWorkTab === "memo" ? "active" : ""}" type="button" data-action="scroll-stock-section" data-tab="memo" data-target=".stock-work-memo">메모</button>
+              <button class="${stockWorkTab === "comments" ? "active" : ""}" type="button" data-action="scroll-stock-section" data-tab="comments" data-target=".stock-work-comments">댓글</button>
             </div>
             <div class="stock-order-like">
               <div class="stock-order-row"><span>현재가</span><strong>${fmtMoney(currentPrice, stock.market)}</strong></div>
@@ -2908,12 +2914,12 @@ function renderStockDetail() {
               <div class="stock-order-row"><span>예상수익</span><strong class="${changeClass(pickReturn(stock, stock.targetPrice))}">${fmtPct(pickReturn(stock, stock.targetPrice))}</strong></div>
               <div class="stock-order-row"><span>데이터</span><strong>${escapeHtml(dataSourceLabel(stock, "스냅샷"))}</strong></div>
             </div>
-            <section class="stock-work-section">
+            <section class="stock-work-section stock-work-analysis">
               <div class="stock-work-section-head"><strong>AI 분석</strong><button class="link-button" data-action="route" data-route="ai">목록</button></div>
               ${analysis ? renderAnalysisSummaryCard(analysis) : `<div class="empty compact">바로 AI 분석을 생성할 수 있습니다.</div>`}
               <button class="trade-action buy stock-work-primary" data-action="generate-ai" data-stock="${escapeHtml(key)}">${analysis ? "AI 재분석" : "AI 분석"}</button>
             </section>
-            <section class="stock-work-section">
+            <section class="stock-work-section stock-work-memo">
               <div class="stock-work-section-head"><strong>메모</strong><span class="muted">내 기록</span></div>
               <form class="form" data-form="memo">
                 <input type="hidden" name="stockKey" value="${escapeHtml(key)}" />
@@ -2921,7 +2927,7 @@ function renderStockDetail() {
                 <button class="btn primary" ${state.user ? "" : "disabled"}>메모 저장</button>
               </form>
             </section>
-            <section class="stock-work-section">
+            <section class="stock-work-section stock-work-comments">
               <div class="stock-work-section-head"><strong>댓글</strong><span class="muted">${fmtNum(comments.length, 0)}개</span></div>
               <form class="form" data-form="pick-comment">
                 <input type="hidden" name="target" value="${escapeHtml(stock.id || key)}" />
@@ -3018,7 +3024,7 @@ function renderStockDiscussionPanel(stock, key, discussion = {}) {
         `).join("")
       : `<div class="empty">${discussion.error ? "토론방을 불러오지 못했습니다." : "최근 토론방 글이 없습니다."}</div>`);
   return `
-    <section class="panel">
+    <section class="panel stock-discussion-panel">
       <div class="panel-head">
         <h2>종목토론방</h2>
         <div class="row wrap"><span class="muted">${escapeHtml(source)}${escapeHtml(stamp)}</span></div>
@@ -5410,6 +5416,7 @@ async function onClick(event) {
     event.stopPropagation();
   }
   if (action === "route") navigate(actionEl.dataset.route, actionEl.dataset.param || "");
+  if (action === "scroll-stock-section") scrollStockSection(actionEl);
   if (action === "theme-toggle") toggleTheme();
   if (action === "toggle-right-panel") {
     state.filters.rightPanelOpen = state.filters.rightPanelOpen === false;
@@ -5541,6 +5548,29 @@ function onInput(event) {
   if (!input) return;
   state.filters[input.dataset.filter] = input.value;
   render();
+}
+
+function scrollStockSection(button) {
+  const target = button?.dataset?.target;
+  if (!target) return;
+  const container = button.closest(".stock-detail-tabs, .stock-work-tabs, .stock-work-segment");
+  if (container) {
+    container.querySelectorAll("button.active").forEach((item) => item.classList.remove("active"));
+    button.classList.add("active");
+    const tab = button.dataset.tab || "";
+    if (tab && container.classList.contains("stock-detail-tabs")) state.filters.stockDetailTab = tab;
+    if (tab && container.getAttribute("aria-label") === "시세 패널") state.filters.stockQuoteTab = tab;
+    if (tab && container.getAttribute("aria-label") === "종목 작업 패널") state.filters.stockWorkTab = tab;
+    if (tab && container.classList.contains("stock-work-segment")) state.filters.stockWorkTab = tab;
+  }
+  const section = document.querySelector(target);
+  if (!section) {
+    toast("해당 섹션을 준비 중입니다.");
+    return;
+  }
+  section.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
+  section.classList.add("section-focus");
+  window.setTimeout(() => section.classList.remove("section-focus"), 900);
 }
 
 async function handleLogin(data) {

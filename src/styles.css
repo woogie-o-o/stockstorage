@@ -3390,6 +3390,22 @@ th {
   position: relative;
 }
 
+.section-focus {
+  animation: section-focus-ring 900ms ease;
+}
+
+@keyframes section-focus-ring {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-2) 0%, transparent);
+  }
+  35% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-2) 20%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-2) 0%, transparent);
+  }
+}
+
 .notice-row {
   width: 100%;
   border: 0;
@@ -3843,6 +3859,12 @@ th {
   width: 100%;
 }
 
+.route-markets table.responsive-table,
+.route-home table.responsive-table {
+  min-width: 0;
+  table-layout: fixed;
+}
+
 .responsive-table th {
   height: 42px;
   color: var(--weak);
@@ -3912,8 +3934,8 @@ th {
 
 .capture-list-head {
   display: grid;
-  grid-template-columns: minmax(320px, 1fr) 142px 112px 180px;
-  gap: 18px;
+  grid-template-columns: minmax(260px, 1fr) 116px 92px 154px;
+  gap: 12px;
   min-height: 42px;
   align-items: center;
   padding: 0 12px;
@@ -3934,8 +3956,8 @@ th {
 
 .capture-rank-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 180px auto;
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) minmax(136px, 164px) auto;
+  gap: 10px;
   align-items: stretch;
   min-height: 82px;
   padding: 0 12px;
@@ -3957,8 +3979,8 @@ th {
   background: transparent;
   color: inherit;
   display: grid;
-  grid-template-columns: 24px 28px 38px minmax(180px, 1fr) 142px 102px 74px minmax(160px, 0.8fr);
-  gap: 10px;
+  grid-template-columns: 22px 26px 34px minmax(128px, 1fr) minmax(82px, 112px) minmax(58px, 82px) minmax(42px, 58px) minmax(92px, 0.7fr);
+  gap: 8px;
   align-items: center;
   padding: 10px 0;
   text-align: left;
