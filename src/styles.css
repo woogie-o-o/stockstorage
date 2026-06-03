@@ -4032,6 +4032,37 @@ th {
   font-size: 12px;
 }
 
+.capture-actions .capture-action-icon {
+  width: 34px;
+  min-width: 34px;
+  min-height: 34px;
+  padding: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.capture-actions .capture-action-icon:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.capture-actions .capture-action-icon.primary,
+.capture-actions .capture-action-icon.accent {
+  background: color-mix(in srgb, var(--accent-2) 12%, transparent);
+  color: var(--accent-2);
+}
+
+.capture-actions .capture-action-icon svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .capture-board {
   min-width: 0;
   overflow: hidden;
@@ -4050,7 +4081,7 @@ th {
 
 .capture-list-head {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) 116px 92px 154px;
+  grid-template-columns: minmax(260px, 1fr) 108px 88px 188px;
   gap: 12px;
   min-height: 42px;
   align-items: center;
@@ -4072,7 +4103,7 @@ th {
 
 .capture-rank-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(136px, 164px) auto;
+  grid-template-columns: minmax(0, 1fr) 188px 154px;
   gap: 10px;
   align-items: stretch;
   min-height: 82px;
@@ -4095,7 +4126,7 @@ th {
   background: transparent;
   color: inherit;
   display: grid;
-  grid-template-columns: 22px 26px 34px minmax(128px, 1fr) minmax(82px, 112px) minmax(58px, 82px) minmax(42px, 58px) minmax(92px, 0.7fr);
+  grid-template-columns: 22px 26px 34px minmax(132px, 1fr) 108px 76px 52px;
   gap: 8px;
   align-items: center;
   padding: 10px 0;
@@ -4193,14 +4224,7 @@ th {
 }
 
 .capture-rank-reason {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1.45;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: none;
 }
 
 .capture-rank-decision {
@@ -4212,6 +4236,12 @@ th {
 
 .capture-rank-decision .decision-cell {
   min-width: 0;
+}
+
+.capture-rank-decision .decision-cell span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .capture-rank-row > .capture-actions {
@@ -4229,7 +4259,7 @@ th {
 
 .post-card .actions-wrap,
 .comment-actions {
-  gap: 5px;
+  gap: 4px;
 }
 
 .post-card .btn,
@@ -4237,8 +4267,27 @@ th {
 .list-row .btn,
 .source-item .btn {
   min-height: 30px;
-  padding: 0 9px;
+  padding: 0 8px;
   font-size: 12px;
+}
+
+.route-community .post-card .actions-wrap {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+}
+
+.route-community .post-card .btn {
+  background: transparent;
+  color: var(--muted);
+}
+
+.route-community .post-card .btn:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.route-community .post-card .btn.danger {
+  color: var(--bad);
 }
 
 .post-body,
@@ -5352,5 +5401,10 @@ button[data-action="refresh-portfolio"] {
 
   .capture-rank-row > .capture-actions .btn {
     min-width: 48px;
+  }
+
+  .capture-rank-row > .capture-actions .capture-action-icon {
+    width: 34px;
+    min-width: 34px;
   }
 }

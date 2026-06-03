@@ -77,6 +77,11 @@ const CHART_RANGES = [
   { id: "5y", label: "5년", points: { minute: 240, day: 1260, week: 260, month: 60 } },
   { id: "all", label: "전체", points: null }
 ];
+const INLINE_ICON_PATHS = {
+  chart: '<path d="M3 15v1.8c0 1.12 0 1.68.22 2.11.19.37.5.68.87.87.43.22.99.22 2.11.22H21M3 15V5m0 10 3.86-3.21c.69-.58 1.04-.87 1.42-.99.45-.14.93-.12 1.36.06.37.15.69.47 1.34 1.12.65.65.98.98 1.35 1.13.44.18.94.2 1.39.05.38-.13.73-.44 1.43-1.05L21 7"/>',
+  compare: '<path d="m16 3 4 4-4 4M20 7H4m4 14-4-4 4-4m-4 4h16"/>',
+  sparkles: '<path d="m12 3-1.8 5.2L5 10l5.2 1.8L12 17l1.8-5.2L19 10l-5.2-1.8L12 3Zm7 12-.8 2.2L16 18l2.2.8L19 21l.8-2.2L22 18l-2.2-.8L19 15Z"/>'
+};
 const MARKET_SENTIMENT_INDICATORS = [
   { id: "vix", name: "VIX 공포지수", ticker: "^VIX", unit: "", benchmark: "20 이하 안정, 30 이상 경계", description: "옵션 가격 기반 변동성 지표로 급등 시 시장 불안 심리가 커졌다는 신호로 봅니다." },
   { id: "tnx", name: "미 10년 국채금리", ticker: "^TNX", unit: "%", benchmark: "4% 전후 부담선", description: "장기 금리 기준점입니다. 상승은 성장주 부담, 하락은 위험자산 선호 회복으로 이어지기 쉽습니다." },
@@ -249,6 +254,11 @@ function safeDecode(value) {
   }
 }
 
+function inlineIcon(name) {
+  const path = INLINE_ICON_PATHS[name] || INLINE_ICON_PATHS.chart;
+  return `<svg aria-hidden="true" viewBox="0 0 24 24">${path}</svg>`;
+}
+
 function navigate(id, param = "") {
   location.hash = `#${id}${param ? `/${encodeURIComponent(param)}` : ""}`;
 }
@@ -304,6 +314,10 @@ function loadData() {
 }
 
 function saveData() {
+  const persisted = readJson(STORE.data);
+  if (persisted?.userDocs && state.data?.userDocs) {
+    state.data.userDocs = { ...persisted.userDocs, ...state.data.userDocs };
+  }
   localStorage.setItem(STORE.data, JSON.stringify(state.data));
 }
 
@@ -331,6 +345,7 @@ function saveSession(user) {
   if (user) localStorage.setItem(STORE.session, JSON.stringify(user));
   else localStorage.removeItem(STORE.session);
   state.user = user;
+  if (user?.uid && state.data) ensureUserDoc(true);
 }
 
 function mergeData(base, saved) {
@@ -1613,7 +1628,12 @@ function normalizeUserDoc(doc = {}) {
 }
 
 function ensureUserDoc(create = true) {
-  if (!state.user) return null;
+  if (!state.user?.uid || !state.data) return null;
+  let changed = false;
+  if (!state.data.userDocs || typeof state.data.userDocs !== "object") {
+    state.data.userDocs = {};
+    changed = true;
+  }
   if (!state.data.userDocs[state.user.uid] && create) {
     state.data.userDocs[state.user.uid] = normalizeUserDoc({
       nickname: state.user.nickname,
@@ -1634,18 +1654,19 @@ function ensureUserDoc(create = true) {
       createdAt: new Date().toISOString(),
       lastActiveAt: new Date().toISOString()
     });
-    saveData();
+    changed = true;
   }
   if (state.data.userDocs[state.user.uid]) {
     const before = JSON.stringify(state.data.userDocs[state.user.uid]);
     state.data.userDocs[state.user.uid] = normalizeUserDoc(state.data.userDocs[state.user.uid]);
     if (before !== JSON.stringify(state.data.userDocs[state.user.uid])) {
-      saveData();
+      changed = true;
       if (state.user.provider === "firebase") {
         queueMicrotask(() => syncFavoritePickFirestore(state.data.userDocs[state.user.uid]?.favorites || []));
       }
     }
   }
+  if (changed) saveData();
   return state.data.userDocs[state.user.uid] || null;
 }
 
@@ -2392,8 +2413,8 @@ function renderCaptureRankRow(row, index) {
   const score = isPick ? Math.abs(pickReturn(item)) : Number(item.score || 0);
   const pattern = isPick ? (item.status === "completed" ? "종료 추천주" : "추천주") : featurePatternLabel(item.pattern) || featureGroupLabel(item.group) || item.pattern || "AI포착";
   const action = isPick
-    ? `<button class="btn primary" data-action="open-stock" data-stock="${escapeHtml(key)}">보기</button>`
-    : `<button class="btn primary" data-action="route" data-route="feature-stock" data-param="${escapeHtml(item.id || key)}">상세</button><button class="btn" data-action="open-stock" data-stock="${escapeHtml(key)}">종목</button>${isAdmin() ? `<button class="btn accent" data-action="promote-feature-pick" data-feature="${escapeHtml(item.id || key)}">승격</button>` : ""}`;
+    ? `<button class="btn capture-action-icon" data-action="open-stock" data-stock="${escapeHtml(key)}" aria-label="종목 상세" title="종목 상세">${inlineIcon("chart")}</button>`
+    : `<button class="btn capture-action-icon primary" data-action="route" data-route="feature-stock" data-param="${escapeHtml(item.id || key)}" aria-label="포착 상세" title="포착 상세">${inlineIcon("chart")}</button><button class="btn capture-action-icon" data-action="open-stock" data-stock="${escapeHtml(key)}" aria-label="종목" title="종목">${inlineIcon("compare")}</button>${isAdmin() ? `<button class="btn capture-action-icon accent" data-action="promote-feature-pick" data-feature="${escapeHtml(item.id || key)}" aria-label="추천주 승격" title="추천주 승격">${inlineIcon("sparkles")}</button>` : ""}`;
   const decision = isPick ? renderVoteBar(item) : renderFeatureDecisionBadges(item);
   return `
     <article class="capture-rank-row">
@@ -2412,7 +2433,7 @@ function renderCaptureRankRow(row, index) {
         <span class="capture-rank-reason">${escapeHtml(item.reason || item.title || "")}</span>
       </button>
       <div class="capture-rank-decision">${decision}</div>
-      <div class="capture-actions">${action}<button class="btn" data-action="generate-ai" data-stock="${escapeHtml(key)}">AI</button></div>
+      <div class="capture-actions">${action}<button class="btn capture-action-icon" data-action="generate-ai" data-stock="${escapeHtml(key)}" aria-label="AI 분석" title="AI 분석">${inlineIcon("sparkles")}</button></div>
     </article>
   `;
 }
@@ -2685,11 +2706,20 @@ function renderFeatureRiskReward(feature) {
   return `<div class="decision-cell"><strong>${escapeHtml(text)}</strong><span>${escapeHtml(detail)}</span></div>`;
 }
 
+function shortDecisionAction(value) {
+  const text = String(value || "").trim();
+  if (!text) return "관찰";
+  if (text.includes("눌림목")) return "눌림목 대기";
+  if (text.includes("분할")) return "분할 관찰";
+  if (text.includes("추격")) return "추격 금지";
+  return text.length > 9 ? `${text.slice(0, 9)}...` : text;
+}
+
 function renderFeatureDecisionBadges(feature) {
   const decision = feature.decision || {};
   const factors = feature.factors || {};
   const priority = decision.priority || "-";
-  const action = feature.tradePlan?.response || decision.buyAttractiveness || "관찰";
+  const action = shortDecisionAction(feature.tradePlan?.response || decision.buyAttractiveness || "관찰");
   const risk = decision.falseBreakoutRisk || riskText(factors.falseBreakoutRisk);
   return `
     <div class="decision-cell">
@@ -4814,7 +4844,7 @@ function renderCommunityPost(post, options = {}) {
           <div class="post-meta"><span>${escapeHtml(post.nickname)}</span><span>Lv.${post.authorLevel || 1}</span><span>${fmtDateTime(post.createdAt)}</span><span>댓글 ${comments.length}</span></div>
         </div>
         <div class="row actions-wrap">
-          <button class="btn" data-action="route" data-route="post" data-param="${escapeHtml(post.id)}">상세</button>
+          ${compact ? "" : `<button class="btn" data-action="route" data-route="post" data-param="${escapeHtml(post.id)}">상세</button>`}
           <button class="btn" data-action="like-post" data-id="${escapeHtml(post.id)}">${liked ? "좋아요 취소" : "좋아요"} ${post.likes}</button>
           ${own ? `<button class="btn" data-action="modal" data-modal="post" data-id="${escapeHtml(post.id)}">수정</button>` : ""}
           ${manageable ? `<button class="btn danger" data-action="delete-post" data-id="${escapeHtml(post.id)}">삭제</button>` : ""}
