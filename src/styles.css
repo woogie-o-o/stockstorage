@@ -1665,7 +1665,7 @@ canvas {
 /* Toss-inspired product surface: preserve behavior, simplify the visual hierarchy. */
 :root {
   color-scheme: light;
-  --bg: #f4f6f8;
+  --bg: #f6f7f9;
   --surface: #ffffff;
   --surface-2: #f7f8fa;
   --surface-3: #f2f4f6;
@@ -1689,9 +1689,9 @@ canvas {
   color-scheme: dark;
   --bg: #17171c;
   --surface: #1f2028;
-  --surface-2: #2a2b35;
-  --surface-3: #343642;
-  --text: #f9fafb;
+  --surface-2: #252631;
+  --surface-3: #30323d;
+  --text: #f2f4f6;
   --muted: #aeb4bf;
   --weak: #7b8492;
   --line: rgba(255, 255, 255, 0.075);
@@ -1870,8 +1870,9 @@ body {
 }
 
 .content {
-  width: min(100%, 1536px);
-  padding: 30px 40px 48px;
+  width: min(100%, 1320px);
+  padding: 28px 36px 48px;
+  justify-self: center;
 }
 
 .route-stock .content,
@@ -2812,23 +2813,27 @@ body {
 
 .page-head {
   margin-bottom: 22px;
+  min-height: 72px;
+  align-items: flex-start;
 }
 
 .eyebrow {
   color: var(--muted);
   font-size: 12px;
-  font-weight: 700;
-  margin-bottom: 7px;
+  font-weight: 800;
+  margin-bottom: 8px;
 }
 
 h1 {
-  font-size: 27px;
-  line-height: 1.25;
+  font-size: 28px;
+  line-height: 1.2;
+  font-weight: 800;
 }
 
 h2 {
   font-size: 18px;
-  line-height: 1.35;
+  line-height: 1.32;
+  font-weight: 800;
 }
 
 h3 {
@@ -2837,7 +2842,8 @@ h3 {
 
 .subtext {
   font-size: 13px;
-  line-height: 1.58;
+  line-height: 1.62;
+  color: var(--muted);
 }
 
 .grid,
@@ -2846,8 +2852,8 @@ h3 {
 }
 
 .dashboard-grid {
-  grid-template-columns: minmax(0, 1fr) 360px;
-  gap: 28px;
+  grid-template-columns: minmax(0, 1fr) 314px;
+  gap: 24px;
 }
 
 .dashboard-grid > aside {
@@ -2868,8 +2874,8 @@ h3 {
 }
 
 .panel-head {
-  min-height: 52px;
-  padding: 12px 0;
+  min-height: 56px;
+  padding: 14px 0 13px;
   border-bottom: 1px solid var(--line);
 }
 
@@ -2892,13 +2898,13 @@ h3 {
 }
 
 .btn {
-  min-height: 36px;
+  min-height: 34px;
   padding: 0 12px;
   border: 0;
-  border-radius: 7px;
+  border-radius: 8px;
   background: var(--surface-2);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .btn:hover {
@@ -2926,7 +2932,7 @@ h3 {
   min-height: 34px;
   padding: 0 12px;
   border: 0;
-  border-radius: 7px;
+  border-radius: 8px;
   background: var(--surface-2);
   color: var(--muted);
   font-size: 12px;
@@ -2950,7 +2956,8 @@ h3 {
 .home-index-grid .metric {
   min-height: 124px;
   padding: 16px 16px 14px;
-  border: 1px solid var(--line);
+  border: 0;
+  border-bottom: 1px solid var(--line);
   background: var(--surface);
 }
 
@@ -2984,7 +2991,7 @@ h3 {
 .stock-row,
 .list-row {
   gap: 8px;
-  padding: 15px 6px;
+  padding: 16px 8px;
   border-color: var(--line);
 }
 
@@ -3006,7 +3013,7 @@ h3 {
   border-radius: 8px;
   padding-left: 12px;
   padding-right: 12px;
-  background: color-mix(in srgb, var(--surface) 82%, var(--bg));
+  background: var(--surface-2);
 }
 
 .dashboard-grid > aside .stock-row + .stock-row,
@@ -3044,15 +3051,17 @@ h3 {
 .table-wrap {
   border: 0;
   border-radius: 0;
+  overflow: visible;
 }
 
 table {
   background: var(--surface);
+  border-collapse: collapse;
 }
 
 th,
 td {
-  padding: 13px 11px;
+  padding: 14px 12px;
   border-color: var(--line);
 }
 
@@ -3075,8 +3084,9 @@ th {
 .textarea {
   min-height: 42px;
   border: 0;
-  border-radius: 7px;
+  border-radius: 8px;
   background: var(--surface-2);
+  font-size: 14px;
 }
 
 .input:focus,
@@ -3087,7 +3097,7 @@ th {
 
 .empty {
   border: 0;
-  border-radius: 7px;
+  border-radius: 8px;
   background: var(--surface-2);
 }
 
@@ -3342,6 +3352,427 @@ th {
 .line-chart-shell canvas {
   cursor: crosshair;
   touch-action: pan-y;
+}
+
+/* Cross-page Toss-style normalization. */
+.route-home .content,
+.route-capture .content,
+.route-markets .content,
+.route-favorites .content,
+.route-journal .content,
+.route-portfolio .content,
+.route-community .content,
+.route-notices .content,
+.route-notice .content,
+.route-profile .content,
+.route-ai .content,
+.route-compare .content,
+.route-leaderboard .content,
+.route-market-sentiment .content,
+.route-investor-flow .content,
+.route-fmkorea-index .content,
+.route-fmkorea-hot .content,
+.route-night-futures .content,
+.route-index .content,
+.route-admin .content {
+  max-width: 1240px;
+}
+
+.page-head > .row,
+.page-head > .row.wrap {
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.page-head .subtext {
+  max-width: 620px;
+  margin-top: 8px;
+}
+
+.page-head .btn {
+  min-width: 64px;
+}
+
+.route-home .page-head,
+.route-markets .page-head,
+.route-capture .page-head {
+  margin-bottom: 18px;
+}
+
+.route-home .dashboard-grid,
+.route-community .split,
+.route-favorites .split,
+.route-portfolio .split,
+.route-market-sentiment .split,
+.route-night-futures .split,
+.route-investor-flow .split,
+.route-fmkorea-index .split,
+.route-fmkorea-hot .split {
+  align-items: start;
+}
+
+.route-home .dashboard-grid > .stack,
+.route-markets .stack,
+.route-capture .stack,
+.route-favorites .stack,
+.route-journal .stack,
+.route-portfolio .stack,
+.route-community .stack {
+  gap: 12px;
+}
+
+.route-home .grid-2,
+.route-markets .grid-2,
+.route-favorites .split,
+.route-portfolio .split,
+.route-community .split {
+  gap: 18px;
+}
+
+.route-home .panel,
+.route-markets .panel,
+.route-capture .panel,
+.route-favorites .panel,
+.route-journal .panel,
+.route-portfolio .panel,
+.route-community .panel,
+.route-notices .panel,
+.route-notice .panel,
+.route-profile .panel,
+.route-ai .panel,
+.route-compare .panel,
+.route-leaderboard .panel,
+.route-market-sentiment .panel,
+.route-investor-flow .panel,
+.route-fmkorea-index .panel,
+.route-fmkorea-hot .panel,
+.route-night-futures .panel,
+.route-index .panel,
+.route-admin .panel {
+  padding: 0;
+  background: var(--surface);
+}
+
+.route-home .panel-head,
+.route-markets .panel-head,
+.route-capture .panel-head,
+.route-favorites .panel-head,
+.route-journal .panel-head,
+.route-portfolio .panel-head,
+.route-community .panel-head,
+.route-notices .panel-head,
+.route-notice .panel-head,
+.route-profile .panel-head,
+.route-ai .panel-head,
+.route-compare .panel-head,
+.route-leaderboard .panel-head,
+.route-market-sentiment .panel-head,
+.route-investor-flow .panel-head,
+.route-fmkorea-index .panel-head,
+.route-fmkorea-hot .panel-head,
+.route-night-futures .panel-head,
+.route-index .panel-head,
+.route-admin .panel-head {
+  padding-right: 0;
+  padding-left: 0;
+}
+
+.route-home .panel-body,
+.route-markets .panel-body,
+.route-capture .panel-body,
+.route-favorites .panel-body,
+.route-journal .panel-body,
+.route-portfolio .panel-body,
+.route-community .panel-body,
+.route-notices .panel-body,
+.route-notice .panel-body,
+.route-profile .panel-body,
+.route-ai .panel-body,
+.route-compare .panel-body,
+.route-leaderboard .panel-body,
+.route-market-sentiment .panel-body,
+.route-investor-flow .panel-body,
+.route-fmkorea-index .panel-body,
+.route-fmkorea-hot .panel-body,
+.route-night-futures .panel-body,
+.route-index .panel-body,
+.route-admin .panel-body {
+  padding-right: 0;
+  padding-left: 0;
+}
+
+.home-index-grid,
+.route-markets .content > .stack > .grid-3:first-child {
+  gap: 1px;
+  overflow: hidden;
+  background: var(--line);
+}
+
+.home-index-grid .metric,
+.route-markets .content > .stack > .grid-3:first-child .metric {
+  border: 0;
+  background: var(--surface);
+}
+
+.route-home .grid-2 > .panel,
+.route-favorites .split > .stack > .panel,
+.route-favorites .split > aside > .panel,
+.route-portfolio .split > .panel,
+.route-portfolio .split > aside.panel,
+.route-community .split > .panel,
+.route-community .split > aside .panel {
+  min-width: 0;
+}
+
+.source-list,
+.feed,
+.comment-list {
+  gap: 0;
+}
+
+.stock-row,
+.list-row,
+.source-item,
+.comment,
+.post-card,
+.favorite-mini {
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.stock-row,
+.list-row,
+.source-item {
+  cursor: pointer;
+}
+
+.source-item {
+  padding: 14px 12px;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--surface);
+}
+
+.source-list .source-item:last-child,
+.panel > div > .source-item:last-child,
+.panel-body > .source-item:last-child {
+  border-bottom: 0;
+}
+
+.stock-row .name,
+.list-row strong,
+.source-item strong,
+.link-title {
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.stock-row .num,
+.source-item .num {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.post-meta {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.route-home .panel .card,
+.route-markets .panel .card,
+.route-capture .panel .card,
+.route-favorites .panel .card,
+.route-journal .panel .card,
+.route-portfolio .panel .card,
+.route-community .panel .card,
+.route-profile .panel .card {
+  background: var(--surface-2);
+}
+
+.kpi,
+.metric {
+  border-radius: 0;
+}
+
+.grid-4 .kpi,
+.route-journal .grid-4 .metric,
+.route-portfolio .grid-4 .metric {
+  min-height: 92px;
+  padding: 14px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.favorite-summary {
+  gap: 1px;
+  overflow: hidden;
+  margin-bottom: 18px;
+  background: var(--line);
+}
+
+.favorite-summary .kpi {
+  border-bottom: 0;
+}
+
+.form {
+  gap: 10px;
+}
+
+.field {
+  gap: 7px;
+}
+
+.field span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.input,
+.select,
+.textarea {
+  padding-right: 12px;
+  padding-left: 12px;
+  color: var(--text);
+}
+
+.textarea {
+  padding-top: 12px;
+}
+
+.route-favorites .form .grid,
+.route-capture .panel-head .row,
+.route-journal .panel-head .row {
+  gap: 8px;
+}
+
+.route-favorites .form .btn,
+.route-profile .form .btn,
+.route-community .form .btn,
+.route-journal .form .btn {
+  min-height: 44px;
+}
+
+.table-wrap {
+  background: var(--surface);
+}
+
+.responsive-table {
+  width: 100%;
+}
+
+.responsive-table th {
+  height: 42px;
+  color: var(--weak);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.responsive-table td {
+  height: 58px;
+  color: var(--text);
+  font-size: 14px;
+  vertical-align: middle;
+}
+
+.responsive-table tbody tr:hover {
+  background: var(--surface-2);
+}
+
+.route-capture .tabs,
+.route-capture .panel-head.wrap {
+  gap: 8px;
+}
+
+.route-capture .tabs {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+}
+
+.route-capture .tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.route-capture .tab {
+  min-width: max-content;
+}
+
+.capture-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 144px;
+}
+
+.capture-actions .btn {
+  min-width: 42px;
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.post-card {
+  border-radius: 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  padding: 18px 0;
+}
+
+.post-card .actions-wrap,
+.comment-actions {
+  gap: 5px;
+}
+
+.post-card .btn,
+.comment .btn,
+.list-row .btn,
+.source-item .btn {
+  min-height: 30px;
+  padding: 0 9px;
+  font-size: 12px;
+}
+
+.post-body,
+.analysis-body,
+.notice-body {
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.72;
+}
+
+.comment {
+  border-radius: 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  padding: 12px 0;
+}
+
+.comment:last-child {
+  border-bottom: 0;
+}
+
+.right-panel {
+  background: #f6f7f9;
+}
+
+:root[data-theme="dark"] .right-panel {
+  background: #17171c;
+}
+
+button[data-action="refresh-prices"],
+button[data-action="refresh-brief"],
+button[data-action="refresh-fmkorea"],
+button[data-action="refresh-market-sectors"],
+button[data-action="refresh-night-futures"],
+button[data-action="refresh-scanner"],
+button[data-action="refresh-market-sentiment"],
+button[data-action="refresh-investor-flow"],
+button[data-action="refresh-portfolio"] {
+  display: none;
 }
 
 @media (max-width: 1180px) {

@@ -978,7 +978,8 @@ function dataSourceStamp(item, fallback = "임시 스냅샷") {
 
 function dataSourceBadge(item, fallback = "FALLBACK") {
   const live = Boolean(item?.source);
-  return `<span class="badge ${live ? "good" : "warn"}">${live ? "LIVE" : escapeHtml(fallback)}</span>`;
+  const label = fallback === "SNAPSHOT" || fallback === "FALLBACK" ? "스냅샷" : fallback;
+  return `<span class="badge ${live ? "good" : ""}">${live ? "LIVE" : escapeHtml(label)}</span>`;
 }
 
 function pickReturn(pick, price = pick.currentPrice) {
@@ -2130,7 +2131,7 @@ function renderHome() {
         <section class="panel">
           <div class="panel-head">
             <h2>${escapeHtml(aiBrief.title || "AI 브리프")}</h2>
-            <div class="row wrap"><button class="btn" data-action="refresh-brief" ${state.aiBriefBusy ? "disabled" : ""}>브리프 갱신</button><button class="btn" data-action="route" data-route="markets">시장 자세히</button></div>
+            <div class="row wrap"><button class="btn" data-action="route" data-route="markets">시장 자세히</button></div>
           </div>
           <div class="panel-body">
             ${briefStamp ? `<span class="muted">${escapeHtml(briefStamp)}</span>` : ""}
@@ -2291,7 +2292,7 @@ function renderCapture() {
     ["completed", "종료 추천주"]
   ];
   const rows = captureRows();
-  const actions = `<button class="btn primary" data-action="refresh-scanner" ${state.scannerBusy ? "disabled" : ""}>${state.scannerBusy ? "스캐너 계산 중" : "스캐너 갱신"}</button><button class="btn" data-action="route" data-route="leaderboard">종료 실적</button><button class="btn" data-action="route" data-route="compare">종목 비교</button><button class="btn" data-action="route" data-route="ai">AI 분석 목록</button>`;
+  const actions = `<button class="btn" data-action="route" data-route="leaderboard">종료 실적</button><button class="btn" data-action="route" data-route="compare">종목 비교</button><button class="btn primary" data-action="route" data-route="ai">AI 분석 목록</button>`;
   return `
     ${renderPageHead("AI Capture", "AI포착과 추천주", "특징주, 급등주, 거래대금/거래량, 추천주와 종료 추천주를 탭과 필터로 봅니다.", actions)}
     <div class="panel">
@@ -2360,7 +2361,7 @@ function renderCaptureTableRow(row) {
       <td data-label="판단">${isPick ? renderVoteBar(item) : renderFeatureDecisionBadges(item)}</td>
       <td data-label="손익비">${isPick ? "-" : renderFeatureRiskReward(item)}</td>
       <td data-label="근거">${escapeHtml(item.reason || item.title || "")}</td>
-      <td data-label="동작"><div class="row wrap">${isPick ? `<button class="btn" data-action="open-stock" data-stock="${escapeHtml(key)}">상세</button>` : `<button class="btn" data-action="route" data-route="feature-stock" data-param="${escapeHtml(item.id || key)}">포착 상세</button><button class="btn" data-action="open-stock" data-stock="${escapeHtml(key)}">종목</button>`}<button class="btn" data-action="generate-ai" data-stock="${escapeHtml(key)}">AI 분석</button></div></td>
+      <td data-label="동작"><div class="capture-actions">${isPick ? `<button class="btn primary" data-action="open-stock" data-stock="${escapeHtml(key)}">상세</button>` : `<button class="btn primary" data-action="route" data-route="feature-stock" data-param="${escapeHtml(item.id || key)}">상세</button><button class="btn" data-action="open-stock" data-stock="${escapeHtml(key)}">종목</button>`}<button class="btn" data-action="generate-ai" data-stock="${escapeHtml(key)}">AI</button></div></td>
     </tr>
   `;
 }
@@ -3134,7 +3135,7 @@ function renderMarkets() {
       <section class="panel">
         <div class="panel-head">
           <h2>업종 등락 · 시장 폭</h2>
-          <button class="btn" data-action="refresh-market-sectors" ${state.marketSectorsBusy ? "disabled" : ""}>시장 폭 갱신</button>
+          <span class="badge ${state.marketSectorsBusy ? "warn" : "good"}">${state.marketSectorsBusy ? "동기화 중" : "자동 동기화"}</span>
         </div>
         <div class="panel-body stack">
           <p class="subtext">${escapeHtml(sectorData.source || "로컬 스냅샷")}${sectorData.updatedAt ? ` · ${escapeHtml(fmtDateTime(sectorData.updatedAt))}` : ""} · ${escapeHtml(sectorData.basis || "업종별 시세 · ETF/ETN 제외")}</p>
@@ -3180,7 +3181,7 @@ function renderMarkets() {
           </div>
         </section>
         <section class="panel">
-          <div class="panel-head"><h2>펨코 지수</h2><div class="row wrap"><span class="badge good">${escapeHtml(m.fmkorea.label)}</span><button class="btn" data-action="route" data-route="fmkorea-index">지수 상세</button><button class="btn" data-action="refresh-fmkorea" ${state.fmkoreaBusy ? "disabled" : ""}>펨코 갱신</button></div></div>
+          <div class="panel-head"><h2>펨코 지수</h2><div class="row wrap"><span class="badge good">${escapeHtml(m.fmkorea.label)}</span><button class="btn" data-action="route" data-route="fmkorea-index">지수 상세</button></div></div>
           <div class="panel-body stack">
             <div class="row-between">
               <div class="ai-score" style="--score:${m.fmkorea.score}%"><span>${m.fmkorea.score}<small>관심도</small></span></div>
@@ -3228,7 +3229,7 @@ function renderMarketSentimentDetail() {
     queueMicrotask(() => refreshMarketSentiment({ withIndicators: true, silent: true }));
   }
   return `
-    ${renderPageHead("Market Sentiment", "시장 심리 지표", `${sentiment.source || "CNN Fear & Greed"} · ${sentiment.updatedAt ? fmtDateTime(sentiment.updatedAt) : "상세 지표 대기"}`, `<button class="btn" data-action="route" data-route="markets">시장</button><button class="btn primary" data-action="refresh-market-sentiment" ${state.marketSentimentBusy ? "disabled" : ""}>심리 갱신</button>`)}
+    ${renderPageHead("Market Sentiment", "시장 심리 지표", `${sentiment.source || "CNN Fear & Greed"} · ${sentiment.updatedAt ? fmtDateTime(sentiment.updatedAt) : "상세 지표 대기"}`, `<button class="btn" data-action="route" data-route="markets">시장</button>`)}
     <div class="split">
       <section class="panel">
         <div class="panel-body stack">
@@ -3252,7 +3253,7 @@ function renderMarketSentimentDetail() {
         <div class="panel-head"><h2>요약</h2><span class="badge">${indicators.length}개 지표</span></div>
         <div class="panel-body stack">
           <p class="subtext">원본 앱의 시장 심리 상세 지표를 웹에서도 같은 프록시 시세로 확인합니다.</p>
-          <div class="source-item"><div class="row-between"><strong>갱신 상태</strong><span>${state.marketSentimentBusy ? "조회 중" : "대기"}</span></div></div>
+          <div class="source-item"><div class="row-between"><strong>동기화</strong><span>${state.marketSentimentBusy ? "조회 중" : "자동"}</span></div></div>
         </div>
       </aside>
     </div>
@@ -3317,7 +3318,6 @@ function renderNightFuturesPanel(nightFutures = normalizeNightFutures()) {
         <h2>KOSPI200 야간선물</h2>
         <div class="row wrap">
           <span class="badge ${nightFutures.available ? "good" : "warn"}">${escapeHtml(statusLabel)}</span>
-          <button class="btn" data-action="refresh-night-futures" ${state.nightFuturesBusy ? "disabled" : ""}>야간선물 갱신</button>
           <button class="btn" data-action="route" data-route="night-futures">상세</button>
         </div>
       </div>
@@ -3349,7 +3349,7 @@ function renderNightFuturesDetail() {
   const nightFutures = normalizeNightFutures(state.data.market.nightFutures);
   const values = nightFutures.history.map((point) => point.price).filter(Number.isFinite);
   const statusClass = nightFutures.available ? changeClass(nightFutures.changeRate ?? nightFutures.change) : "muted";
-  const actions = `<button class="btn" data-action="route" data-route="markets">시장</button><button class="btn primary" data-action="refresh-night-futures" ${state.nightFuturesBusy ? "disabled" : ""}>갱신</button>`;
+  const actions = `<button class="btn" data-action="route" data-route="markets">시장</button>`;
   const stamp = [
     nightFutures.source,
     nightFutures.updatedAt ? fmtDateTime(nightFutures.updatedAt) : "",
@@ -3444,13 +3444,13 @@ function renderMarketIndexDetail() {
   const historyCandles = applyChartRange(marketIndexCandlesForFrame(index, indexChartFrame, indexMinuteInterval), indexChartFrame, indexChartRange);
   const historyValues = chartValuesFromCandles(historyCandles);
   const historyMeta = state.historyMeta.get(chartHistoryKey) || state.historyMeta.get(historyKey) || {};
-  const updatedAt = index.marketTime ? fmtDateTime(index.marketTime) : "새로고침 전 fallback";
+  const updatedAt = index.marketTime ? fmtDateTime(index.marketTime) : "자동 동기화 대기";
   const chartStamp = chartMetaStamp(historyKey, indexChartFrame, indexMinuteInterval, historyValues.length);
   if (shouldLoadChartHistory(historyKey, indexChartFrame, indexMinuteInterval)) {
     queueMicrotask(() => loadMarketHistory(index.ticker, { silent: true, frame: indexChartFrame, interval: indexMinuteInterval }));
   }
   return `
-    ${renderPageHead("Market Index", index.name, index.ticker, `<button class="btn" data-action="route" data-route="markets">목록</button><button class="btn primary" data-action="load-index-history" data-ticker="${escapeHtml(index.ticker)}" data-frame="${indexChartFrame}" data-interval="${indexMinuteInterval}" ${state.historyBusy.has(chartHistoryKey) ? "disabled" : ""}>차트 갱신</button>`)}
+    ${renderPageHead("Market Index", index.name, index.ticker, `<button class="btn" data-action="route" data-route="markets">목록</button>`)}
     <div class="split">
       <div class="stack">
         <section class="card">
@@ -3458,7 +3458,7 @@ function renderMarketIndexDetail() {
             <div>
               <div class="price-main num">${fmtNum(index.value, index.value < 100 ? 2 : 1)}</div>
               <div class="${changeClass(index.changeRate)} section">${fmtPct(index.changeRate)}</div>
-              <p class="subtext">${escapeHtml(dataSourceStamp(index, "seed fallback · 상단 시세 새로고침으로 실제 값을 조회합니다."))}</p>
+              <p class="subtext">${escapeHtml(dataSourceStamp(index, "seed fallback · 실시간 시세가 자동 동기화됩니다."))}</p>
             </div>
             <span class="badge ${index.source ? "good" : ""}">${index.source ? "LIVE" : "FALLBACK"}</span>
           </div>
@@ -3480,13 +3480,13 @@ function renderMarketIndexDetail() {
           ${renderKpi("심볼", index.ticker)}
           ${renderKpi("데이터 소스", index.source || "fallback")}
           ${renderKpi("등락률", fmtPct(index.changeRate), changeClass(index.changeRate))}
-          ${renderKpi("갱신 시각", updatedAt)}
+          ${renderKpi("동기화 시각", updatedAt)}
           ${renderKpi("차트 소스", historyMeta.source || "추정")}
           ${renderKpi("차트 포인트", fmtNum(historyMeta.points || historyValues.length))}
         </section>
         <section class="panel">
           <div class="panel-head"><h2>확인 기준</h2></div>
-          <div class="panel-body"><p class="subtext">국내 지수는 Naver realtime과 일봉 API를 우선 사용하고, 해외 지수·환율·선물은 Yahoo Finance 응답이 가능할 때 갱신합니다.</p></div>
+          <div class="panel-body"><p class="subtext">국내 지수는 Naver realtime과 일봉 API를 우선 사용하고, 해외 지수·환율·선물은 Yahoo Finance 응답이 가능할 때 자동 반영합니다.</p></div>
         </section>
       </aside>
     </div>
@@ -3551,7 +3551,7 @@ function renderInvestorFlowDetail() {
   if (!hasTop5 && !state.investorFlowBusy) {
     queueMicrotask(() => refreshInvestorFlow({ silent: true }));
   }
-  const actions = `<button class="btn" data-action="route" data-route="markets">시장</button><button class="btn" data-action="copy-investor-flow">공유문구 복사</button><button class="btn primary" data-action="refresh-investor-flow" ${state.investorFlowBusy ? "disabled" : ""}>수급 갱신</button>`;
+  const actions = `<button class="btn" data-action="route" data-route="markets">시장</button><button class="btn" data-action="copy-investor-flow">공유문구 복사</button>`;
   return `
     ${renderPageHead("Investor Flow", "마감 수급", `${flow.source || "finance.naver.com"} · ${flow.date || "조회 대기"}`, actions)}
     <div class="stack">
@@ -3661,7 +3661,7 @@ function renderFmkoreaIndexDetail() {
   const trend = fmkoreaTrend(fmkorea.series);
   const recent = fmkorea.series.slice(-14);
   const values = recent.map((item) => Number(item.count || 0));
-  const actions = `<button class="btn" data-action="route" data-route="markets">시장</button><button class="btn" data-action="route" data-route="fmkorea-hot">HOT 종목</button><button class="btn" data-action="copy-fmkorea-index">공유문구 복사</button><button class="btn primary" data-action="refresh-fmkorea" ${state.fmkoreaBusy ? "disabled" : ""}>펨코 갱신</button>`;
+  const actions = `<button class="btn" data-action="route" data-route="markets">시장</button><button class="btn" data-action="route" data-route="fmkorea-hot">HOT 종목</button><button class="btn" data-action="copy-fmkorea-index">공유문구 복사</button>`;
   return `
     ${renderPageHead("FMKorea Index", "펨코지수", `${fmkorea.source || "fmkorea.com/stock"} · ${fmkorea.updatedAt ? fmtDateTime(fmkorea.updatedAt) : "스냅샷"}`, actions)}
     <div class="stack">
@@ -3705,7 +3705,7 @@ function renderFmkoreaHotDetail() {
   if (!fmkorea.hot.length && !state.fmkoreaBusy) {
     queueMicrotask(() => refreshFmkoreaMarketData({ silent: true }));
   }
-  const actions = `<button class="btn" data-action="route" data-route="markets">시장</button><button class="btn" data-action="route" data-route="fmkorea-index">펨코지수</button><button class="btn" data-action="copy-fmkorea-hot">공유문구 복사</button><button class="btn primary" data-action="refresh-fmkorea" ${state.fmkoreaBusy ? "disabled" : ""}>펨코 갱신</button>`;
+  const actions = `<button class="btn" data-action="route" data-route="markets">시장</button><button class="btn" data-action="route" data-route="fmkorea-index">펨코지수</button><button class="btn" data-action="copy-fmkorea-hot">공유문구 복사</button>`;
   return `
     ${renderPageHead("FMKorea HOT", "펨코 HOT 종목", `${fmkorea.source || "fmkorea.com/stock"} · ${fmkorea.realtimeDate || "실시간 스냅샷"}`, actions)}
     <div class="stack">
@@ -3953,7 +3953,7 @@ function renderJournalChartDetail() {
     queueMicrotask(() => loadHistory(key, { silent: true }));
   }
   return `
-    ${renderPageHead("Trading Journal Chart", `${stock.name} 매매 차트`, `${stock.ticker} · ${stock.market} · 실제 일봉 위에 매수/매도 기록을 표시합니다.`, `<button class="btn" data-action="route" data-route="journal">목록</button><button class="btn" data-action="open-stock" data-stock="${escapeHtml(key)}">종목 상세</button><button class="btn primary" data-action="load-history" data-stock="${escapeHtml(key)}" ${state.historyBusy.has(key) ? "disabled" : ""}>차트 갱신</button>`)}
+    ${renderPageHead("Trading Journal Chart", `${stock.name} 매매 차트`, `${stock.ticker} · ${stock.market} · 실제 일봉 위에 매수/매도 기록을 표시합니다.`, `<button class="btn" data-action="route" data-route="journal">목록</button><button class="btn primary" data-action="open-stock" data-stock="${escapeHtml(key)}">종목 상세</button>`)}
     <div class="stack">
       <div class="grid grid-4">
         ${renderKpiCard("평균 매수가", summary.buyQty ? fmtMoney(summary.avgBuy, stock.market) : "-", `매수 ${fmtNum(summary.buyQty, 2)}주`, "")}
@@ -3995,7 +3995,7 @@ function renderPortfolio() {
   const totalValue = holdings.reduce((sum, item) => sum + item.value, 0);
   const unrealized = totalValue - totalCost;
   return `
-    ${renderPageHead("Portfolio", "보유 현황", "매매일지를 종목별로 집계해 남은 수량, 평균단가, 평가손익을 계산합니다.", `<button class="btn" data-action="route" data-route="journal">매매일지</button><button class="btn primary" data-action="refresh-portfolio" ${state.portfolioBusy ? "disabled" : ""}>현재가 갱신</button>`)}
+    ${renderPageHead("Portfolio", "보유 현황", "매매일지를 종목별로 집계해 남은 수량, 평균단가, 평가손익을 계산합니다.", `<button class="btn primary" data-action="route" data-route="journal">매매일지</button>`)}
     <div class="grid grid-4">
       ${renderKpiCard("보유 종목", `${holdings.length}개`, "남은 수량 기준", "")}
       ${renderKpiCard("평가금액", fmtMoney(totalValue), "현재가 또는 기록가 기준", "")}
