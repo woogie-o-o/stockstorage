@@ -123,6 +123,52 @@ await evaluate(`
 `);
 await waitFor(`document.body.textContent.includes(${JSON.stringify(email)}) && document.body.textContent.includes("프로필")`, 18000);
 
+await navigate("#journal");
+await waitFor(`
+  (() => {
+    const mainText = document.querySelector("main")?.textContent || "";
+    return mainText.includes("매매일지를 작성해보세요.")
+      && !mainText.includes("HBM 뉴스 이후 눌림 구간 분할 진입")
+      && !mainText.includes("목표가 근접으로 일부 이익 실현")
+      && !mainText.includes("현대차");
+  })()
+`);
+
+await navigate("#portfolio");
+await waitFor(`
+  (() => {
+    const mainText = document.querySelector("main")?.textContent || "";
+    return mainText.includes("매수 기록이 남은 종목이 없습니다.")
+      && !mainText.includes("HBM 뉴스 이후 눌림 구간 분할 진입")
+      && !mainText.includes("목표가 근접으로 일부 이익 실현")
+      && !mainText.includes("현대차");
+  })()
+`);
+
+await navigate("#ai");
+await waitFor(`
+  (() => {
+    const mainText = document.querySelector("main")?.textContent || "";
+    return mainText.includes("종목 상세에서 AI 분석을 생성하면 이곳에 캐시됩니다.")
+      && !mainText.includes("목표 대비 여력")
+      && !mainText.includes("HBM 공급 회복");
+  })()
+`);
+
+await navigate("#favorites");
+await waitFor(`
+  (() => {
+    const mainText = document.querySelector("main")?.textContent || "";
+    const session = JSON.parse(localStorage.getItem("woogi-stock-session-v1"));
+    const data = JSON.parse(localStorage.getItem("woogi-stock-data-v1"));
+    const doc = data.userDocs[session.uid];
+    return mainText.includes("등록한 관심종목이 없습니다.")
+      && mainText.includes("추천주 상세에서 관심 등록을 누르면 표시됩니다.")
+      && Object.keys(doc.favoriteStocks || {}).length === 0
+      && (doc.favorites || []).length === 0;
+  })()
+`);
+
 await navigate("#stock/KS_005930");
 await waitFor(`document.body.textContent.includes("삼성전자") && Boolean(document.querySelector('[data-action="toggle-favorite-stock"]'))`);
 await evaluate(`
