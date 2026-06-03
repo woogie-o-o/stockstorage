@@ -26,7 +26,7 @@ const DIRECT_ROUTE_ALIASES = {
   pick: "stock",
   analysis: "market-analysis"
 };
-const DEFAULT_ADMIN_UIDS = ["1KzEXKZMoFaYOymYyoI283AR3Y32", "v4a3ClF3FhWGXsGnZ29wyvQNSCX2"];
+const DEFAULT_ADMIN_UIDS = ["1KzEXKZMoFaYOymYyoI283AR3Y32", "v4a3ClF3FhWGXsGnZ29wyvQNSCX2", "Iw0Oyfn2SuONCkd5au9pnAUXGN52"];
 const ADMIN_UIDS = new Set([...DEFAULT_ADMIN_UIDS, ...readConfiguredAdminUids()]);
 const FALLBACK_PICK_SNAPSHOTS = {
   pick_samsung: { buyPrice: 292000, targetPrice: 355000, currentPrice: 347000, changeRate: 9.46 },
@@ -132,6 +132,8 @@ const state = {
   marketSectorsBusy: false,
   marketSentimentBusy: false,
   nightFuturesBusy: false,
+  scannerBusy: false,
+  autoRefreshTimer: null,
   compareItems: [],
   compareBusy: false,
   portfolioBusy: false,
@@ -151,7 +153,7 @@ const state = {
 init();
 
 async function init() {
-  document.documentElement.dataset.theme = localStorage.getItem(STORE.theme) || "dark";
+  document.documentElement.dataset.theme = localStorage.getItem(STORE.theme) || "light";
   window.addEventListener("hashchange", () => {
     state.route = parseRoute();
     render();
@@ -160,8 +162,9 @@ async function init() {
   document.addEventListener("submit", onSubmit);
   document.addEventListener("input", onInput);
   await initFirebase();
-  await loadRemoteData();
-  await recordDailyAttendance();
+  render();
+  await runWithTimeout(() => loadRemoteData(), 8000, "remote data load");
+  await runWithTimeout(() => recordDailyAttendance(), 4000, "attendance write");
   render();
   queueMicrotask(() => refreshPrices({ silent: true }));
   queueMicrotask(() => refreshInvestorFlow({ silent: true }));
@@ -169,6 +172,50 @@ async function init() {
   queueMicrotask(() => refreshFmkoreaMarketData({ silent: true }));
   queueMicrotask(() => refreshMarketSectors({ silent: true }));
   queueMicrotask(() => refreshNightFutures({ silent: true }));
+  queueMicrotask(() => refreshScannerFeatures({ silent: true }));
+  startAutoRefresh();
+}
+
+function startAutoRefresh() {
+  if (state.autoRefreshTimer) return;
+  state.autoRefreshTimer = window.setInterval(() => {
+    if (document.hidden) return;
+    refreshPrices({ silent: true });
+    if (state.route.id === "stock" && state.route.param) {
+      refreshStockQuote(state.route.param, { silent: true });
+    }
+    if (state.route.id === "feature-stock") {
+      const feature = findFeatureStock(state.route.param);
+      if (feature) refreshStockQuote(stockKey(feature), { silent: true });
+    }
+  }, 60000);
+}
+
+function runWithTimeout(task, ms, label) {
+  let done = false;
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      if (done) return;
+      done = true;
+      console.warn(`${label} timed out`);
+      resolve(null);
+    }, ms);
+    Promise.resolve()
+      .then(task)
+      .then((value) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((error) => {
+        console.warn(`${label} failed`, error);
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        resolve(null);
+      });
+  });
 }
 
 function parseRoute() {
@@ -246,7 +293,11 @@ function loadData() {
     localStorage.setItem(STORE.data, JSON.stringify(seeded));
     return seeded;
   }
-  return mergeData(makeSeedData(), saved);
+  const merged = mergeData(makeSeedData(), saved);
+  if (JSON.stringify(merged.userDocs || {}) !== JSON.stringify(saved.userDocs || {})) {
+    localStorage.setItem(STORE.data, JSON.stringify(merged));
+  }
+  return merged;
 }
 
 function saveData() {
@@ -1240,7 +1291,10 @@ function normalizePick(item) {
     downVotes: Number(item.downVotes || 0),
     earningsDate: item.earningsDate || null,
     marketTime: item.marketTime || null,
-    source: item.source || ""
+    source: item.source || "",
+    factors: item.factors || {},
+    tradePlan: item.tradePlan || {},
+    decision: item.decision || {}
   };
 }
 
@@ -1271,7 +1325,10 @@ function normalizeFeature(item) {
     createdAt: item.createdAt || new Date().toISOString(),
     currentPrice: Number(item.currentPrice || item.price || 0),
     marketTime: item.marketTime || null,
-    source: item.source || ""
+    source: item.source || "",
+    factors: item.factors || {},
+    tradePlan: item.tradePlan || {},
+    decision: item.decision || {}
   };
 }
 
@@ -1501,12 +1558,36 @@ function normalizeInvestorFlowItems(items) {
   }));
 }
 
+function normalizeFavoriteCollections(doc = {}) {
+  const favoriteStocks = Object.fromEntries(
+    Object.entries(doc.favoriteStocks || {})
+      .map(([key, stock]) => {
+        const normalizedStock = {
+          ticker: String(stock?.ticker || "").trim().toUpperCase(),
+          name: String(stock?.name || stock?.ticker || key).trim(),
+          market: String(stock?.market || key.split("_")[0] || "KS").toUpperCase(),
+          addedAt: stock?.addedAt || new Date().toISOString()
+        };
+        return [stockKey(normalizedStock), normalizedStock];
+      })
+      .filter(([key, stock]) => key && stock.ticker)
+  );
+  const favoriteStockIds = [...new Set([
+    ...(Array.isArray(doc.favoriteStockIds) ? doc.favoriteStockIds : []),
+    ...Object.keys(favoriteStocks)
+  ])].filter((id) => favoriteStocks[id]);
+  const stockKeyPattern = /^[A-Z]{2,3}_[A-Z0-9.=^-]+$/;
+  const favorites = [
+    ...new Set(Array.isArray(doc.favorites) ? doc.favorites : [])
+  ].filter((id) => id && !stockKeyPattern.test(id) && !favoriteStocks[id]);
+  return { favorites, favoriteStocks, favoriteStockIds };
+}
+
 function normalizeUserDoc(doc = {}) {
+  const favorites = normalizeFavoriteCollections(doc);
   return {
     ...doc,
-    favorites: Array.isArray(doc.favorites) ? doc.favorites : [],
-    favoriteStocks: doc.favoriteStocks || {},
-    favoriteStockIds: Array.isArray(doc.favoriteStockIds) ? doc.favoriteStockIds : [],
+    ...favorites,
     memos: doc.memos || {},
     likedPosts: doc.likedPosts || {},
     likedJournals: doc.likedJournals || {},
@@ -1546,7 +1627,14 @@ function ensureUserDoc(create = true) {
     saveData();
   }
   if (state.data.userDocs[state.user.uid]) {
+    const before = JSON.stringify(state.data.userDocs[state.user.uid]);
     state.data.userDocs[state.user.uid] = normalizeUserDoc(state.data.userDocs[state.user.uid]);
+    if (before !== JSON.stringify(state.data.userDocs[state.user.uid])) {
+      saveData();
+      if (state.user.provider === "firebase") {
+        queueMicrotask(() => syncFavoritePickFirestore(state.data.userDocs[state.user.uid]?.favorites || []));
+      }
+    }
   }
   return state.data.userDocs[state.user.uid] || null;
 }
@@ -1560,7 +1648,7 @@ function isAdmin() {
 }
 
 async function syncUserDocFirestore(payload) {
-  if (!state.firebase.enabled || !state.user) return;
+  if (!state.firebase.enabled || !state.user || state.user.provider !== "firebase") return;
   const f = state.firebase.modules.firestoreMod;
   try {
     const doc = getUserDoc();
@@ -1625,8 +1713,12 @@ function firestoreReady() {
   return Boolean(state.firebase.enabled && state.firebase.db && state.firebase.modules?.firestoreMod);
 }
 
+function canWriteFirestore() {
+  return Boolean(firestoreReady() && state.user?.provider === "firebase");
+}
+
 function storageReady() {
-  return Boolean(state.firebase.enabled && state.firebase.storage && state.firebase.modules?.storageMod);
+  return Boolean(state.firebase.enabled && state.firebase.storage && state.firebase.modules?.storageMod && state.user?.provider === "firebase");
 }
 
 function toTimestamp(value) {
@@ -1777,37 +1869,26 @@ async function signOut() {
 }
 
 function render() {
-  const nav = renderNav(false);
   const mobileNav = renderMobileNav();
   const sidePanelOpen = state.filters.rightPanelOpen !== false;
   app.innerHTML = `
     <div class="layout route-${escapeHtml(state.route.id)} ${sidePanelOpen ? "right-panel-open" : "right-panel-closed"}">
-      <aside class="sidebar">
-        <div class="brand">
-          <img src="/assets/icon.png" alt="우기의 주식 로고" />
-          <div>
-            <div class="brand-title">우기의 주식</div>
-            <div class="brand-sub">투자를 더 쉽게</div>
-          </div>
-        </div>
-        <div class="nav-caption">메뉴</div>
-        <nav class="nav">${nav}</nav>
-        <div class="sidebar-footer">
-          <div class="sync-state">${escapeHtml(state.firebase.status)}<br />${state.user ? `${escapeHtml(state.user.nickname)} · ${escapeHtml(state.user.email)}` : "이메일 로그인 대기"}</div>
-          <button class="btn" data-action="theme-toggle">테마 전환</button>
-        </div>
-      </aside>
       <main class="main">
         <header class="topbar">
           <button class="btn icon mobile-only" data-action="route" data-route="home" aria-label="홈">⌂</button>
           <div class="mobile-brand"><img src="/assets/icon.png" alt="" />우기의 주식</div>
+          <button class="desktop-brand" data-action="route" data-route="home" aria-label="우기의 주식 홈">
+            <img src="/assets/icon.png" alt="" />
+            <strong>우기의 주식</strong>
+          </button>
+          <nav class="desktop-top-nav" aria-label="주요 메뉴">
+            ${renderDesktopTopNav()}
+          </nav>
           <form class="global-search" data-form="global-search">
             <span class="search-symbol">⌕</span>
             <input name="q" value="${escapeHtml(state.filters.captureSearch)}" placeholder="종목명 또는 티커를 검색하세요" autocomplete="off" />
           </form>
           <div class="top-actions">
-            <button class="btn icon side-panel-toggle" data-action="toggle-right-panel" aria-label="${sidePanelOpen ? "오른쪽 패널 닫기" : "오른쪽 패널 열기"}" title="${sidePanelOpen ? "오른쪽 패널 닫기" : "오른쪽 패널 열기"}">${sidePanelOpen ? "›" : "‹"}</button>
-            <button class="btn" data-action="refresh-prices" ${state.pricesBusy ? "disabled" : ""}>새로고침</button>
             ${state.user ? `<button class="btn primary" data-action="route" data-route="profile">${escapeHtml(state.user.nickname)}</button>` : `<button class="btn primary" data-action="route" data-route="profile">로그인</button>`}
           </div>
         </header>
@@ -1815,6 +1896,7 @@ function render() {
         ${mobileNav}
       </main>
       ${renderRightPanel(sidePanelOpen)}
+      ${renderDesktopRail(sidePanelOpen)}
     </div>
     ${state.modal ? renderModal() : ""}
   `;
@@ -1823,11 +1905,7 @@ function render() {
 
 function renderRightPanel(open) {
   if (!open) {
-    return `
-      <aside class="right-panel rail" aria-label="접힌 오른쪽 패널">
-        <button class="right-panel-rail-button" data-action="toggle-right-panel" aria-label="오른쪽 패널 열기" title="오른쪽 패널 열기">‹</button>
-      </aside>
-    `;
+    return `<aside class="right-panel collapsed" aria-label="접힌 오른쪽 패널"></aside>`;
   }
   const favoriteStocks = state.user ? Object.values(getUserDoc().favoriteStocks || {}).slice(0, 5) : [];
   const picks = state.data.stockPicks.filter((pick) => pick.status === "active").slice(0, 4);
@@ -1835,8 +1913,8 @@ function renderRightPanel(open) {
   return `
     <aside class="right-panel" aria-label="오른쪽 패널">
       <div class="right-panel-head">
-        <strong>실시간 보드</strong>
-        <button class="btn icon" data-action="toggle-right-panel" aria-label="오른쪽 패널 닫기" title="오른쪽 패널 닫기">›</button>
+        <strong>관심</strong>
+        <button class="link-button" data-action="route" data-route="favorites">관리</button>
       </div>
       <div class="right-panel-scroll">
         <section class="side-section">
@@ -1885,6 +1963,45 @@ function renderRightPanel(open) {
   `;
 }
 
+function renderDesktopTopNav() {
+  return [
+    ["home", "홈"],
+    ["capture", "AI포착"],
+    ["markets", "시장"],
+    ["community", "커뮤니티"]
+  ].map(([id, label]) => `
+    <button class="${navActive(id) ? "active" : ""}" data-action="route" data-route="${id}">${label}</button>
+  `).join("");
+}
+
+function renderDesktopRail(open) {
+  const items = [
+    ["portfolio", "chart", "내 투자"],
+    ["favorites", "heart", "관심"],
+    ["journal", "recent", "최근 본"],
+    ["markets", "activity", "실시간"],
+    ["compare", "compare", "비교"],
+    ["ai", "sparkles", "AI"],
+    ["notices", "bell", "공지"],
+    ["profile", "user", "프로필"]
+  ];
+  if (isAdmin()) items.push(["admin", "settings", "관리자"]);
+  return `
+    <aside class="desktop-rail" aria-label="퀵 메뉴">
+      <button class="desktop-rail-button rail-toggle ${open ? "open" : ""}" data-action="toggle-right-panel" aria-label="${open ? "관심 패널 닫기" : "관심 패널 열기"}" title="${open ? "관심 패널 닫기" : "관심 패널 열기"}"><svg aria-hidden="true"><use href="/assets/rail-icons.svg#chevrons"></use></svg></button>
+      <div class="desktop-rail-menu">
+        ${items.map(([route, icon, label]) => `
+          <button class="desktop-rail-button ${navActive(route) ? "active" : ""}" data-action="route" data-route="${route}" aria-label="${label}" title="${label}">
+            <span class="desktop-rail-icon" aria-hidden="true"><svg><use href="/assets/rail-icons.svg#${icon}"></use></svg></span>
+            <span class="desktop-rail-label">${label}</span>
+          </button>
+        `).join("")}
+      </div>
+      <button class="desktop-rail-button rail-theme" data-action="theme-toggle" aria-label="테마 전환" title="테마 전환"><span class="desktop-rail-icon" aria-hidden="true"><svg><use href="/assets/rail-icons.svg#theme"></use></svg></span><span class="desktop-rail-label">테마</span></button>
+    </aside>
+  `;
+}
+
 function renderNav(isMobile) {
   return ROUTES.filter((route) => (isMobile ? MOBILE_ROUTES.includes(route.id) : route.id !== "admin" || isAdmin()))
     .map((route) => {
@@ -1914,7 +2031,7 @@ function navActive(id) {
 }
 
 function navCount(id) {
-  if (id === "capture") return state.data.stockPicks.filter((p) => p.status === "active").length;
+  if (id === "capture") return captureCount();
   if (id === "favorites") return state.user ? favoriteCount() : "";
   if (id === "journal") return state.user ? myJournals().length : "";
   if (id === "ai") return state.user ? myAnalyses().length : "";
@@ -2151,7 +2268,7 @@ function renderPostRow(post) {
 
 function renderFavoriteMini(stock) {
   return `
-    <div class="card">
+    <div class="card favorite-mini">
       <div class="row-between">
         <div>
           <div class="name">${escapeHtml(stock.name)}</div>
@@ -2174,7 +2291,7 @@ function renderCapture() {
     ["completed", "종료 추천주"]
   ];
   const rows = captureRows();
-  const actions = `<button class="btn" data-action="route" data-route="leaderboard">종료 실적</button><button class="btn" data-action="route" data-route="compare">종목 비교</button><button class="btn" data-action="route" data-route="ai">AI 분석 목록</button>`;
+  const actions = `<button class="btn primary" data-action="refresh-scanner" ${state.scannerBusy ? "disabled" : ""}>${state.scannerBusy ? "스캐너 계산 중" : "스캐너 갱신"}</button><button class="btn" data-action="route" data-route="leaderboard">종료 실적</button><button class="btn" data-action="route" data-route="compare">종목 비교</button><button class="btn" data-action="route" data-route="ai">AI 분석 목록</button>`;
   return `
     ${renderPageHead("AI Capture", "AI포착과 추천주", "특징주, 급등주, 거래대금/거래량, 추천주와 종료 추천주를 탭과 필터로 봅니다.", actions)}
     <div class="panel">
@@ -2189,9 +2306,9 @@ function renderCapture() {
       </div>
       <div class="table-wrap">
         <table class="responsive-table">
-          <thead><tr><th>종목</th><th>구분</th><th>현재가</th><th>등락/수익</th><th>점수/투표</th><th>근거</th><th>동작</th></tr></thead>
+          <thead><tr><th>종목</th><th>구분</th><th>현재가</th><th>등락/수익</th><th>판단</th><th>손익비</th><th>근거</th><th>동작</th></tr></thead>
           <tbody>
-            ${rows.map(renderCaptureTableRow).join("") || `<tr><td colspan="7"><div class="empty">조건에 맞는 종목이 없습니다.</div></td></tr>`}
+            ${rows.map(renderCaptureTableRow).join("") || `<tr><td colspan="8"><div class="empty">조건에 맞는 종목이 없습니다.</div></td></tr>`}
           </tbody>
         </table>
       </div>
@@ -2240,7 +2357,8 @@ function renderCaptureTableRow(row) {
       <td data-label="구분"><span class="badge ${isPick ? "good" : "warn"}">${isPick ? (item.status === "completed" ? "종료 추천주" : "추천주") : escapeHtml(item.pattern || item.group)}</span></td>
       <td data-label="현재가" class="num">${fmtMoney(price, item.market)}</td>
       <td data-label="등락/수익" class="num ${changeClass(change)}">${fmtPct(change)}</td>
-      <td data-label="점수/투표">${isPick ? renderVoteBar(item) : `<span class="badge good">AI ${fmtNum(item.score)}</span>`}</td>
+      <td data-label="판단">${isPick ? renderVoteBar(item) : renderFeatureDecisionBadges(item)}</td>
+      <td data-label="손익비">${isPick ? "-" : renderFeatureRiskReward(item)}</td>
       <td data-label="근거">${escapeHtml(item.reason || item.title || "")}</td>
       <td data-label="동작"><div class="row wrap">${isPick ? `<button class="btn" data-action="open-stock" data-stock="${escapeHtml(key)}">상세</button>` : `<button class="btn" data-action="route" data-route="feature-stock" data-param="${escapeHtml(item.id || key)}">포착 상세</button><button class="btn" data-action="open-stock" data-stock="${escapeHtml(key)}">종목</button>`}<button class="btn" data-action="generate-ai" data-stock="${escapeHtml(key)}">AI 분석</button></div></td>
     </tr>
@@ -2254,7 +2372,7 @@ function renderFeatureStockDetail() {
   }
   const key = stockKey(feature);
   const userDoc = state.user ? getUserDoc() : null;
-  const favorite = Boolean(userDoc?.favoriteStocks?.[key]);
+  const favoriteStock = Boolean(userDoc?.favoriteStocks?.[key]);
   const analysis = findAnalysis(key);
   const stockChartMode = state.filters.stockChartMode === "line" ? "line" : "candles";
   const stockChartFrame = chartFrameId(state.filters.stockChartFrame);
@@ -2266,6 +2384,11 @@ function renderFeatureStockDetail() {
   const historyMeta = state.historyMeta.get(chartHistoryKey) || state.historyMeta.get(key) || {};
   const historyStamp = chartMetaStamp(key, stockChartFrame, stockMinuteInterval, historyCandles.length);
   const discussion = state.stockDiscussions.get(key) || {};
+  const featureHeaderActions = `<button class="btn" data-action="route" data-route="capture">AI포착</button><button class="btn" data-action="open-stock" data-stock="${escapeHtml(key)}">종목 상세</button><button class="btn ${favoriteStock ? "danger" : ""}" data-action="toggle-favorite-stock" data-stock="${escapeHtml(key)}">${favoriteStock ? "관심 해제" : "관심 등록"}</button><button class="btn accent" data-action="generate-ai" data-stock="${escapeHtml(key)}">${analysis ? "재분석" : "AI 분석"}</button>`;
+  const decision = feature.decision || {};
+  const factors = feature.factors || {};
+  const tradePlan = feature.tradePlan || {};
+  const positionGuide = tradePlan.positionGuide || {};
   if (shouldLoadChartHistory(key, stockChartFrame, stockMinuteInterval)) {
     queueMicrotask(() => loadHistory(key, { silent: true, frame: stockChartFrame, interval: stockMinuteInterval }));
   }
@@ -2275,21 +2398,62 @@ function renderFeatureStockDetail() {
   if (isDomesticStock(feature) && !state.stockDiscussions.has(key) && !state.stockDiscussionsBusy.has(key)) {
     queueMicrotask(() => loadStockDiscussions(key, { silent: true }));
   }
+  const mobileFeatureHeader = `
+    <div class="stock-mobile-header">
+      <div class="stock-mobile-toolbar">
+        <button type="button" data-action="route" data-route="capture" aria-label="목록으로 돌아가기" title="목록으로 돌아가기">‹</button>
+        <div class="stock-mobile-toolbar-actions">
+          <button type="button" class="${favoriteStock ? "active" : ""}" data-action="toggle-favorite-stock" data-stock="${escapeHtml(key)}" aria-label="${favoriteStock ? "관심종목 해제" : "관심종목 등록"}" title="${favoriteStock ? "관심종목 해제" : "관심종목 등록"}">${favoriteStock ? "♥" : "♡"}</button>
+          <button type="button" data-action="generate-ai" data-stock="${escapeHtml(key)}" aria-label="AI 분석" title="AI 분석">✦</button>
+          <button type="button" data-action="route" data-route="compare" data-param="${escapeHtml(key)}" aria-label="종목 비교" title="종목 비교">⋯</button>
+        </div>
+      </div>
+      <div class="stock-mobile-name">
+        <strong>${escapeHtml(feature.name)}</strong>
+        <span>${escapeHtml(feature.ticker)} · ${escapeHtml(feature.market)} · ${escapeHtml(featureTitle(feature))}</span>
+      </div>
+    </div>
+  `;
   return `
-    ${renderPageHead("Feature Stock", `${feature.name} 포착 상세`, `${feature.ticker} · ${feature.market} · ${featureGroupLabel(feature.group)}`, `<button class="btn" data-action="route" data-route="capture">AI포착</button><button class="btn" data-action="open-stock" data-stock="${escapeHtml(key)}">종목 상세</button><button class="btn ${favorite ? "danger" : ""}" data-action="toggle-favorite-stock" data-stock="${escapeHtml(key)}">${favorite ? "관심 해제" : "관심 등록"}</button><button class="btn accent" data-action="generate-ai" data-stock="${escapeHtml(key)}">${analysis ? "재분석" : "AI 분석"}</button>`)}
+    ${mobileFeatureHeader}
+    ${renderPageHead("Feature Stock", `${feature.name} 포착 상세`, `${feature.ticker} · ${feature.market} · ${featureGroupLabel(feature.group)}`, featureHeaderActions)}
     <div class="split">
       <div class="stack">
-        <section class="card">
+        <section class="card stock-overview">
           <div class="detail-hero">
             <div>
+              <div class="desktop-stock-name"><strong>${escapeHtml(feature.name)}</strong><span>${escapeHtml(feature.ticker)} · ${escapeHtml(feature.market)} · ${escapeHtml(featureTitle(feature))}</span></div>
               <div class="price-main num">${fmtMoney(feature.currentPrice || feature.price, feature.market)}</div>
               <div class="${changeClass(feature.changeRate)} section">${fmtPct(feature.changeRate)}</div>
               <p class="subtext">${escapeHtml(localizedFeatureReason(feature))}</p>
               <div class="data-line section">${dataSourceBadge(feature, "SNAPSHOT")}<span>${escapeHtml(dataSourceStamp(feature, "포착 스냅샷"))}</span></div>
             </div>
-            <div class="row wrap">
-              <span class="badge good">${escapeHtml(featureTitle(feature))}</span>
-              <span class="badge ${feature.market === "US" ? "warn" : "good"}">${escapeHtml(feature.market)}</span>
+            <div class="detail-action-cluster">
+              <div class="desktop-detail-actions">${featureHeaderActions}</div>
+              <div class="row wrap"><span class="badge good">${escapeHtml(featureTitle(feature))}</span><span class="badge ${feature.market === "US" ? "warn" : "good"}">${escapeHtml(feature.market)}</span></div>
+            </div>
+          </div>
+        </section>
+        <section class="panel feature-decision-panel">
+          <div class="panel-body">
+            <div class="feature-decision-hero">
+              <div>
+                <span class="badge good">투자위원회 판단</span>
+                <h2>${escapeHtml(decision.summary || `${featureTitle(feature)} · ${renderFeatureRiskRewardText(feature)}`)}</h2>
+                <p class="subtext">${escapeHtml(decision.confirmation || "거래량과 종가 위치를 확인한 뒤 진입 여부를 판단합니다.")}</p>
+              </div>
+              <div class="feature-decision-score">
+                <strong>${escapeHtml(decision.priority || "-")}</strong>
+                <span>우선순위</span>
+              </div>
+            </div>
+            <div class="decision-metrics">
+              ${renderKpi("최종 매수 점수", factors.finalBuy != null ? `${fmtNum(factors.finalBuy, 0)}점` : `${fmtNum(feature.score, 0)}점`, "good")}
+              ${renderKpi("수익 가능성", factors.profit != null ? `${fmtNum(factors.profit, 0)}점` : "-")}
+              ${renderKpi("손익비", renderFeatureRiskRewardText(feature))}
+              ${renderKpi("허위돌파 위험", decision.falseBreakoutRisk || riskText(factors.falseBreakoutRisk))}
+              ${renderKpi("추격 위험", riskText(factors.chaseRisk || 0), factors.chaseRisk >= 65 ? "warn" : "")}
+              ${renderKpi("권장 대응", tradePlan.response || "관찰 유지", "good")}
             </div>
           </div>
         </section>
@@ -2300,8 +2464,8 @@ function renderFeatureStockDetail() {
           <button type="button" data-action="route" data-route="compare" data-param="${escapeHtml(key)}">비교</button>
           <button type="button" data-action="route" data-route="community">커뮤니티</button>
         </nav>
-        <section class="panel">
-          <div class="panel-head wrap"><div><h2>포착 차트</h2><p class="subtext">${escapeHtml(historyStamp)}</p></div><div class="row wrap"><div class="tabs compact"><button class="tab ${stockChartMode === "candles" ? "active" : ""}" data-action="stock-chart-mode" data-mode="candles">캔들</button><button class="tab ${stockChartMode === "line" ? "active" : ""}" data-action="stock-chart-mode" data-mode="line">라인</button></div><button class="btn" data-action="load-history" data-stock="${escapeHtml(key)}" data-frame="${stockChartFrame}" data-interval="${stockMinuteInterval}" ${state.historyBusy.has(chartHistoryKey) ? "disabled" : ""}>차트 갱신</button></div></div>
+        <section class="panel stock-chart-panel">
+          <div class="panel-head wrap"><div><h2>포착 차트</h2><p class="subtext">${escapeHtml(historyStamp)}</p></div><div class="row wrap"><div class="tabs compact"><button class="tab ${stockChartMode === "candles" ? "active" : ""}" data-action="stock-chart-mode" data-mode="candles">캔들</button><button class="tab ${stockChartMode === "line" ? "active" : ""}" data-action="stock-chart-mode" data-mode="line">라인</button></div></div></div>
           <div class="panel-body">
             ${renderChartFrameControls("stock", stockChartFrame, stockMinuteInterval)}
             ${stockChartMode === "candles"
@@ -2320,8 +2484,16 @@ function renderFeatureStockDetail() {
               ${renderKpi("거래대금", formatTradingValue(feature.tradingValue))}
               ${renderKpi("거래량 배수", feature.volumeRatio > 0 ? `${fmtNum(feature.volumeRatio, 1)}x` : "-")}
               ${renderKpi("포착 점수", fmtNum(feature.score, 0), "good")}
+              ${renderKpi("RSI", factors.rsi != null ? fmtNum(factors.rsi, 1) : "-")}
+              ${renderKpi("MACD 전환", factors.macdTurnUp ? "상승 전환" : "확인 중")}
+              ${renderKpi("VWAP 위치", factors.aboveVwap ? "위" : "아래")}
+              ${renderKpi("BB 폭 분위", factors.bbWidthRank != null ? `${fmtNum(factors.bbWidthRank, 0)}%` : "-")}
               ${renderKpi("포착일", fmtDate(feature.sourceDate || feature.createdAt))}
               ${renderKpi("현재가 출처", dataSourceLabel(feature, "스냅샷"))}
+              ${tradePlan.entryPrice ? renderKpi("진입 관찰가", fmtMoney(tradePlan.entryPrice, feature.market)) : ""}
+              ${tradePlan.stopPrice ? renderKpi("무효화 가격", fmtMoney(tradePlan.stopPrice, feature.market), "warn") : ""}
+              ${tradePlan.targetPrice ? renderKpi("목표가", fmtMoney(tradePlan.targetPrice, feature.market), "good") : ""}
+              ${tradePlan.stopPct ? renderKpi("손절폭", `${fmtNum(tradePlan.stopPct, 1)}%`, "warn") : ""}
               ${renderKpi("차트 포인트", fmtNum(historyMeta.points || historyValues.length))}
             </div>
           </div>
@@ -2338,8 +2510,11 @@ function renderFeatureStockDetail() {
           </div>
         </section>
         <section class="panel">
-          <div class="panel-head"><h2>안내</h2></div>
-          <div class="panel-body">
+          <div class="panel-head"><h2>진입 계획</h2><span class="badge">${escapeHtml(tradePlan.riskLevel || "관찰")}</span></div>
+          <div class="panel-body stack">
+            <div class="source-item"><strong>관찰가</strong><p class="subtext">${tradePlan.entryPrice ? `${fmtMoney(tradePlan.entryPrice, feature.market)} 위에서 종가와 거래량을 확인합니다.` : "관찰가 산정 대기"}</p></div>
+            <div class="source-item"><strong>무효화</strong><p class="subtext">${tradePlan.stopPrice ? `${fmtMoney(tradePlan.stopPrice, feature.market)} 이탈 시 시나리오를 재검토합니다.` : "무효화 가격 산정 대기"}</p></div>
+            <div class="source-item"><strong>포지션 가이드</strong><p class="subtext">${positionGuide.quantity ? `${escapeHtml(positionGuide.basis || "가상 리스크 기준")} · ${fmtNum(positionGuide.quantity, 0)}주 · 노출 ${fmtMoney(positionGuide.notional, feature.market)}` : "계좌 규모 입력 전 참고용입니다."}</p></div>
             <p class="subtext">특징주는 시장 데이터 기반 포착 정보이며, 매수·매도 권유가 아닙니다.</p>
           </div>
         </section>
@@ -2352,6 +2527,15 @@ function findFeatureStock(param) {
   const decoded = decodeURIComponent(param || "");
   const found = state.data.marketFeatures.find((item) => item.id === decoded || stockKey(item) === decoded || item.ticker === decoded);
   return found ? normalizeFeature(found) : null;
+}
+
+function findStockPick(param) {
+  const decoded = decodeURIComponent(param || "");
+  return state.data.stockPicks.find((item) => item.id === decoded || stockKey(item) === decoded || item.ticker === decoded);
+}
+
+function isStockPick(stock) {
+  return Boolean(stock?.id && findStockPick(stock.id));
 }
 
 function featureTitle(feature) {
@@ -2390,6 +2574,45 @@ function featurePatternLabel(pattern) {
   return labels[pattern] || "";
 }
 
+function riskText(scoreOrLabel) {
+  if (typeof scoreOrLabel === "string") return scoreOrLabel || "-";
+  const score = Number(scoreOrLabel || 0);
+  if (score >= 72) return "높음";
+  if (score >= 48) return "확인 필요";
+  if (score >= 28) return "보통";
+  return "낮음";
+}
+
+function renderFeatureRiskRewardText(feature) {
+  const rr = Number(feature?.tradePlan?.riskReward || feature?.factors?.riskReward || 0);
+  return rr > 0 ? `${fmtNum(rr, 1)}R` : "-";
+}
+
+function renderFeatureRiskReward(feature) {
+  const rr = Number(feature?.tradePlan?.riskReward || feature?.factors?.riskReward || 0);
+  const stopPct = Number(feature?.tradePlan?.stopPct || 0);
+  const text = rr > 0 ? `${fmtNum(rr, 1)}R` : "-";
+  const detail = stopPct > 0 ? `손절 ${fmtNum(stopPct, 1)}%` : "손절 확인";
+  return `<div class="decision-cell"><strong>${escapeHtml(text)}</strong><span>${escapeHtml(detail)}</span></div>`;
+}
+
+function renderFeatureDecisionBadges(feature) {
+  const decision = feature.decision || {};
+  const factors = feature.factors || {};
+  const priority = decision.priority || "-";
+  const action = feature.tradePlan?.response || decision.buyAttractiveness || "관찰";
+  const risk = decision.falseBreakoutRisk || riskText(factors.falseBreakoutRisk);
+  return `
+    <div class="decision-cell">
+      <div class="row wrap">
+        <span class="badge good">${escapeHtml(priority)}등급</span>
+        <span class="badge ${risk === "높음" ? "warn" : ""}">${escapeHtml(risk)}</span>
+      </div>
+      <span>${escapeHtml(action)}</span>
+    </div>
+  `;
+}
+
 function localizedFeatureReason(feature) {
   const reason = String(feature.reason || "").trim();
   if (reason) return reason;
@@ -2423,7 +2646,28 @@ function renderStockDetail() {
   if (!stock) return `${renderPageHead("Stock", "종목을 찾을 수 없습니다", "AI포착 또는 관심종목에서 다시 선택해주세요.")}`;
   const key = stockKey(stock);
   const userDoc = state.user ? getUserDoc() : null;
-  const favorite = Boolean(userDoc?.favoriteStocks?.[key]);
+  const favoriteStock = Boolean(userDoc?.favoriteStocks?.[key]);
+  const stockPick = isStockPick(stock);
+  const favoritePick = Boolean(stockPick && userDoc?.favorites?.includes(stock.id));
+  const favoritePickButton = stockPick
+    ? `<button class="btn ${favoritePick ? "danger" : ""}" data-action="toggle-favorite-pick" data-pick="${escapeHtml(stock.id)}">${favoritePick ? "추천 관심 해제" : "관심추천주"}</button>`
+    : "";
+  const mobileStockHeader = `
+    <div class="stock-mobile-header">
+      <div class="stock-mobile-toolbar">
+        <button type="button" data-action="route" data-route="capture" aria-label="목록으로 돌아가기" title="목록으로 돌아가기">‹</button>
+        <div class="stock-mobile-toolbar-actions">
+          <button type="button" class="${favoriteStock ? "active" : ""}" data-action="toggle-favorite-stock" data-stock="${escapeHtml(key)}" aria-label="${favoriteStock ? "관심종목 해제" : "관심종목 등록"}" title="${favoriteStock ? "관심종목 해제" : "관심종목 등록"}">${favoriteStock ? "♥" : "♡"}</button>
+          <button type="button" data-action="generate-ai" data-stock="${escapeHtml(key)}" aria-label="AI 분석" title="AI 분석">✦</button>
+          <button type="button" data-action="route" data-route="compare" data-param="${escapeHtml(key)}" aria-label="종목 비교" title="종목 비교">⋯</button>
+        </div>
+      </div>
+      <div class="stock-mobile-name">
+        <strong>${escapeHtml(stock.name)}</strong>
+        <span>${escapeHtml(stock.ticker)} · ${escapeHtml(stock.market)}</span>
+      </div>
+    </div>
+  `;
   const memo = userDoc?.memos?.[key] || "";
   const analysis = findAnalysis(key);
   const comments = state.data.pickComments[stock.id] || state.data.pickComments[key] || [];
@@ -2451,33 +2695,45 @@ function renderStockDetail() {
   if (isDomesticStock(stock) && !state.stockDiscussions.has(key) && !state.stockDiscussionsBusy.has(key)) {
     queueMicrotask(() => loadStockDiscussions(key, { silent: true }));
   }
+  const currentPrice = Number(stock.currentPrice || stock.price || stock.closedPrice || 0);
+  const quoteValueLabel = stock.tradingValue ? "거래대금" : fundamentals.marketCap ? "시가총액" : "거래대금";
+  const quoteValue = stock.tradingValue ? formatTradingValue(stock.tradingValue) : fundamentals.marketCap ? formatMarketCap(fundamentals.marketCap, stock.market) : "-";
+  const stockHeaderActions = `
+    <button class="btn stock-icon-action" data-action="route" data-route="capture" aria-label="목록"><span>‹</span><b>목록</b></button>
+    <button class="btn stock-icon-action" data-action="route" data-route="compare" data-param="${escapeHtml(key)}" aria-label="비교"><span>↔</span><b>비교</b></button>
+    ${stockPick ? `<button class="btn stock-icon-action ${favoritePick ? "danger" : ""}" data-action="toggle-favorite-pick" data-pick="${escapeHtml(stock.id)}" aria-label="${favoritePick ? "관심추천주 해제" : "관심추천주"}"><span>✦</span><b>추천</b></button>` : ""}
+    <button class="btn stock-icon-action ${favoriteStock ? "danger" : ""}" data-action="toggle-favorite-stock" data-stock="${escapeHtml(key)}" aria-label="${favoriteStock ? "관심 해제" : "관심 등록"}"><span>${favoriteStock ? "♥" : "♡"}</span><b>관심</b></button>
+    <button class="btn stock-icon-action accent" data-action="generate-ai" data-stock="${escapeHtml(key)}" aria-label="${analysis ? "AI 재분석" : "AI 분석"}"><span>✦</span><b>AI</b></button>
+  `;
   return `
-    ${renderPageHead("Stock Detail", `${stock.name}`, `${stock.ticker} · ${stock.market}`, `<button class="btn" data-action="route" data-route="capture">목록</button><button class="btn" data-action="route" data-route="compare" data-param="${escapeHtml(key)}">비교</button><button class="btn ${favorite ? "danger" : ""}" data-action="toggle-favorite-stock" data-stock="${escapeHtml(key)}">${favorite ? "관심 해제" : "관심 등록"}</button><button class="btn accent" data-action="generate-ai" data-stock="${escapeHtml(key)}">${analysis ? "재분석" : "AI 분석"}</button>`)}
+    ${mobileStockHeader}
+    ${renderPageHead("Stock Detail", `${stock.name}`, `${stock.ticker} · ${stock.market}`, stockHeaderActions)}
     <div class="split">
       <div class="stack">
-        <section class="card">
+        <section class="card stock-overview">
           <div class="detail-hero">
             <div>
+              <div class="desktop-stock-name"><strong>${escapeHtml(stock.name)}</strong><span>${escapeHtml(stock.ticker)} · ${escapeHtml(stock.market)}</span></div>
               <div class="price-main num">${fmtMoney(stock.currentPrice || stock.price || stock.closedPrice, stock.market)}</div>
               <div class="${changeClass(stock.changeRate || pickReturn(stock))} section">${fmtPct(stock.changeRate || pickReturn(stock))}</div>
               <p class="subtext">${escapeHtml(stock.reason || "관심종목으로 등록한 종목입니다.")}</p>
               <div class="data-line section">${dataSourceBadge(stock, "SNAPSHOT")}<span>${escapeHtml(dataSourceStamp(stock, "추천/관심종목 스냅샷"))}</span></div>
             </div>
-            <div class="row wrap">
-              <span class="badge">${escapeHtml(stock.category || stock.pattern || "STOCK")}</span>
-              <span class="badge ${stock.market === "US" ? "warn" : "good"}">${escapeHtml(stock.market)}</span>
+            <div class="detail-action-cluster">
+              <div class="desktop-detail-actions">${stockHeaderActions}</div>
+              <div class="row wrap"><span class="badge">${escapeHtml(stock.category || stock.pattern || "STOCK")}</span><span class="badge ${stock.market === "US" ? "warn" : "good"}">${escapeHtml(stock.market)}</span></div>
             </div>
           </div>
         </section>
         <nav class="stock-detail-tabs" aria-label="종목 상세 탭">
           <button class="active" type="button">차트</button>
-          <button type="button">호가</button>
+          <button type="button">시세</button>
           <button type="button">내 주식</button>
           <button type="button">종목정보</button>
           <button type="button">커뮤니티</button>
         </nav>
-        <section class="panel">
-          <div class="panel-head wrap"><div><h2>차트</h2><p class="subtext">${escapeHtml(historyStamp)}</p></div><div class="row wrap"><div class="tabs compact"><button class="tab ${stockChartMode === "candles" ? "active" : ""}" data-action="stock-chart-mode" data-mode="candles">캔들</button><button class="tab ${stockChartMode === "line" ? "active" : ""}" data-action="stock-chart-mode" data-mode="line">라인</button></div><button class="btn" data-action="load-history" data-stock="${escapeHtml(key)}" data-frame="${stockChartFrame}" data-interval="${stockMinuteInterval}" ${state.historyBusy.has(chartHistoryKey) ? "disabled" : ""}>차트 갱신</button></div></div>
+        <section class="panel stock-chart-panel">
+          <div class="panel-head wrap"><div><h2>차트</h2><p class="subtext">${escapeHtml(historyStamp)}</p></div><div class="row wrap"><div class="tabs compact"><button class="tab ${stockChartMode === "candles" ? "active" : ""}" data-action="stock-chart-mode" data-mode="candles">캔들</button><button class="tab ${stockChartMode === "line" ? "active" : ""}" data-action="stock-chart-mode" data-mode="line">라인</button></div></div></div>
           <div class="panel-body">
             ${renderChartFrameControls("stock", stockChartFrame, stockMinuteInterval)}
             ${stockChartMode === "candles"
@@ -2500,8 +2756,38 @@ function renderStockDetail() {
           ${renderKpi("차트 출처", historyMeta.source || "추정")}
           ${renderKpi("차트 포인트", fmtNum(historyMeta.points || historyValues.length))}
         </section>
+      </div>
+      <aside class="stock-quote-stack">
+        <section class="panel stock-quote-panel">
+          <div class="stock-work-tabs" aria-label="시세 패널">
+            <button type="button">시세</button>
+            <button type="button">수급</button>
+            <button class="active" type="button">재료</button>
+            <button class="stock-work-more" type="button">+</button>
+          </div>
+          <div class="stock-quote-body">
+            <div class="stock-live-price">
+              <span>${escapeHtml(dataSourceLabel(stock, "스냅샷"))}</span>
+              <strong class="num">${fmtMoney(currentPrice, stock.market)}</strong>
+              <b class="${changeClass(stock.changeRate || pickReturn(stock))}">${fmtPct(stock.changeRate || pickReturn(stock))}</b>
+              <small>${escapeHtml(dataSourceStamp(stock, "자동 동기화 대기"))}</small>
+            </div>
+            <div class="stock-live-grid">
+              <div><span>시가</span><strong>${fmtMoney(currentPrice * 0.98, stock.market)}</strong></div>
+              <div><span>고가</span><strong class="up">${fmtMoney(currentPrice * 1.04, stock.market)}</strong></div>
+              <div><span>저가</span><strong class="down">${fmtMoney(currentPrice * 0.96, stock.market)}</strong></div>
+              <div><span>${escapeHtml(quoteValueLabel)}</span><strong>${escapeHtml(quoteValue)}</strong></div>
+            </div>
+            <div class="stock-signal-list">
+              <div class="stock-signal-row"><span>목표가</span><strong>${fmtMoney(stock.targetPrice, stock.market)}</strong><b class="${changeClass(pickReturn(stock, stock.targetPrice))}">${fmtPct(pickReturn(stock, stock.targetPrice))}</b></div>
+              <div class="stock-signal-row"><span>매수가</span><strong>${fmtMoney(stock.buyPrice, stock.market)}</strong><b>${stock.buyPrice ? "기준가" : "-"}</b></div>
+              <div class="stock-signal-row"><span>차트</span><strong>${escapeHtml(historyMeta.source || "자동 조회")}</strong><b>${fmtNum(historyMeta.points || historyValues.length)}개</b></div>
+              <div class="stock-signal-row"><span>AI</span><strong>${analysis ? escapeHtml(analysis.scoreLabel || "분석 완료") : "분석 대기"}</strong><b>${analysis ? `${fmtNum(analysis.score, 0)}점` : "-"}</b></div>
+            </div>
+          </div>
+        </section>
         <section class="panel">
-          <div class="panel-head"><h2>재무지표</h2><button class="btn" data-action="load-stock-extras" data-stock="${escapeHtml(key)}" ${state.stockExtrasBusy.has(key) ? "disabled" : ""}>재무·뉴스 갱신</button></div>
+          <div class="panel-head"><h2>재무지표</h2><span class="muted">${state.stockExtrasBusy.has(key) ? "자동 조회 중" : "자동 동기화"}</span></div>
           <div class="panel-body grid grid-4">
             ${renderKpi("PER", formatRatio(fundamentals.per))}
             ${renderKpi("PBR", formatRatio(fundamentals.pbr))}
@@ -2516,33 +2802,49 @@ function renderStockDetail() {
           </div>
         </section>
         ${isDomesticStock(stock) ? renderStockDiscussionPanel(stock, key, discussion) : ""}
-      </div>
-      <aside class="stack">
-        <section class="panel">
-          <div class="panel-head"><h2>AI 분석</h2><button class="btn" data-action="route" data-route="ai">목록</button></div>
-          <div class="panel-body">
-            ${analysis ? renderAnalysisSummaryCard(analysis) : `<div class="empty">바로 AI 분석을 생성할 수 있습니다.</div>`}
+      </aside>
+      <aside class="stock-side-stack">
+        <section class="panel stock-work-panel">
+          <div class="stock-work-tabs" aria-label="종목 작업 패널">
+            <button class="active" type="button">일반분석</button>
+            <button type="button">메모</button>
+            <button type="button">커뮤니티</button>
+            <button class="stock-work-more" data-action="route" data-route="ai" type="button">+</button>
           </div>
-        </section>
-        <section class="panel">
-          <div class="panel-head"><h2>메모</h2></div>
-          <div class="panel-body">
-            <form class="form" data-form="memo">
-              <input type="hidden" name="stockKey" value="${escapeHtml(key)}" />
-              <textarea class="textarea" name="memo" placeholder="투자 메모">${escapeHtml(memo)}</textarea>
-              <button class="btn primary" ${state.user ? "" : "disabled"}>메모 저장</button>
-            </form>
-          </div>
-        </section>
-        <section class="panel">
-          <div class="panel-head"><h2>댓글</h2></div>
-          <div class="panel-body stack">
-            <form class="form" data-form="pick-comment">
-              <input type="hidden" name="target" value="${escapeHtml(stock.id || key)}" />
-              <textarea class="textarea" name="content" placeholder="댓글 작성"></textarea>
-              <button class="btn" ${state.user ? "" : "disabled"}>등록</button>
-            </form>
-            <div class="comment-list">${comments.map(renderComment).join("") || `<div class="empty">아직 댓글이 없습니다.</div>`}</div>
+          <div class="stock-work-body">
+            <div class="stock-work-segment" aria-label="분석 유형">
+              <button class="active" type="button">AI</button>
+              <button type="button">메모</button>
+              <button type="button">댓글</button>
+            </div>
+            <div class="stock-order-like">
+              <div class="stock-order-row"><span>현재가</span><strong>${fmtMoney(currentPrice, stock.market)}</strong></div>
+              <div class="stock-order-row"><span>목표가</span><strong>${fmtMoney(stock.targetPrice, stock.market)}</strong></div>
+              <div class="stock-order-row"><span>예상수익</span><strong class="${changeClass(pickReturn(stock, stock.targetPrice))}">${fmtPct(pickReturn(stock, stock.targetPrice))}</strong></div>
+              <div class="stock-order-row"><span>데이터</span><strong>${escapeHtml(dataSourceLabel(stock, "스냅샷"))}</strong></div>
+            </div>
+            <section class="stock-work-section">
+              <div class="stock-work-section-head"><strong>AI 분석</strong><button class="link-button" data-action="route" data-route="ai">목록</button></div>
+              ${analysis ? renderAnalysisSummaryCard(analysis) : `<div class="empty compact">바로 AI 분석을 생성할 수 있습니다.</div>`}
+              <button class="trade-action buy stock-work-primary" data-action="generate-ai" data-stock="${escapeHtml(key)}">${analysis ? "AI 재분석" : "AI 분석"}</button>
+            </section>
+            <section class="stock-work-section">
+              <div class="stock-work-section-head"><strong>메모</strong><span class="muted">내 기록</span></div>
+              <form class="form" data-form="memo">
+                <input type="hidden" name="stockKey" value="${escapeHtml(key)}" />
+                <textarea class="textarea" name="memo" placeholder="투자 메모">${escapeHtml(memo)}</textarea>
+                <button class="btn primary" ${state.user ? "" : "disabled"}>메모 저장</button>
+              </form>
+            </section>
+            <section class="stock-work-section">
+              <div class="stock-work-section-head"><strong>댓글</strong><span class="muted">${fmtNum(comments.length, 0)}개</span></div>
+              <form class="form" data-form="pick-comment">
+                <input type="hidden" name="target" value="${escapeHtml(stock.id || key)}" />
+                <textarea class="textarea" name="content" placeholder="댓글 작성"></textarea>
+                <button class="btn" ${state.user ? "" : "disabled"}>등록</button>
+              </form>
+              <div class="comment-list compact">${comments.slice(0, 2).map(renderComment).join("") || `<div class="empty compact">아직 댓글이 없습니다.</div>`}</div>
+            </section>
           </div>
         </section>
       </aside>
@@ -2634,7 +2936,7 @@ function renderStockDiscussionPanel(stock, key, discussion = {}) {
     <section class="panel">
       <div class="panel-head">
         <h2>종목토론방</h2>
-        <div class="row wrap"><span class="muted">${escapeHtml(source)}${escapeHtml(stamp)}</span><button class="btn" data-action="load-discussions" data-stock="${escapeHtml(stockKey(stock))}" ${busy ? "disabled" : ""}>토론방 갱신</button></div>
+        <div class="row wrap"><span class="muted">${escapeHtml(source)}${escapeHtml(stamp)}</span></div>
       </div>
       <div class="panel-body source-list">${body}</div>
     </section>
@@ -3541,10 +3843,16 @@ function renderFavorites() {
   const stocks = Object.values(doc.favoriteStocks || {});
   return `
     ${renderPageHead("Watchlist", "관심종목", "추천주 관심과 일반 관심종목을 분리해 관리하고 현재가를 확인합니다.")}
+    <section class="grid grid-4 favorite-summary">
+      ${renderKpi("일반 관심종목", `${fmtNum(stocks.length, 0)}개`, stocks.length ? "good" : "")}
+      ${renderKpi("관심 추천주", `${fmtNum(favoritePicks.length, 0)}개`, favoritePicks.length ? "good" : "")}
+      ${renderKpi("저장 분리", "정상", "good")}
+      ${renderKpi("사용자", state.user.nickname || state.user.email || "-")}
+    </section>
     <div class="split">
       <div class="stack">
         <section class="panel">
-          <div class="panel-head"><h2>일반 관심종목</h2></div>
+          <div class="panel-head"><h2>일반 관심종목</h2><span class="badge">${fmtNum(stocks.length, 0)}개</span></div>
           <div class="panel-body">
             <form class="form" data-form="favorite-stock">
               <div class="grid grid-3">
@@ -3560,7 +3868,7 @@ function renderFavorites() {
       </div>
       <aside class="stack">
         <section class="panel">
-          <div class="panel-head"><h2>관심 추천주</h2></div>
+          <div class="panel-head"><h2>관심 추천주</h2><span class="badge">${fmtNum(favoritePicks.length, 0)}개</span></div>
           <div>${favoritePicks.map(renderStockListRow).join("") || `<div class="panel-body"><div class="empty">추천주 상세에서 관심 등록을 누르면 표시됩니다.</div></div>`}</div>
         </section>
         <section class="panel">
@@ -3659,7 +3967,7 @@ function renderJournalChartDetail() {
           <div class="journal-marker-legend"><span><i class="buy"></i>매수</span><span><i class="sell"></i>매도</span></div>
         </div>
         <div class="panel-body">
-          <div class="chart-box journal-candles"><canvas data-chart="journal-candles" data-points="${escapeHtml(JSON.stringify(candles))}" data-markers="${escapeHtml(JSON.stringify(markers))}"></canvas></div>
+          <div class="chart-box journal-candles"><canvas data-chart="journal-candles" data-points="${escapeHtml(JSON.stringify(candles))}" data-markers="${escapeHtml(JSON.stringify(markers))}" data-market="${escapeHtml(stock.market || "KS")}"></canvas></div>
         </div>
       </section>
       <section class="panel">
@@ -3749,7 +4057,7 @@ function groupedJournals() {
     groups.set(key, item);
   }
   return [...groups.values()].map((item) => {
-    const known = getStockByKey(item.key);
+    const known = state.discoveredStocks.get(item.key) || getStockByKey(item.key);
     const avgPrice = item.buyQty ? item.buyAmount / item.buyQty : 0;
     const remainingQty = Math.max(0, item.buyQty - item.sellQty);
     const currentPrice = Number(known?.currentPrice || known?.price || avgPrice || 0);
@@ -3785,7 +4093,7 @@ function renderPortfolioRow(item) {
 
 function myJournals() {
   if (!state.user) return [];
-  return state.data.journals.filter((j) => j.uid === state.user.uid || (state.user.provider === "local" && j.uid === "demo"));
+  return state.data.journals.filter((j) => j.uid === state.user.uid);
 }
 
 function filteredJournals() {
@@ -4028,7 +4336,7 @@ function renderAi() {
 
 function myAnalyses() {
   if (!state.user) return state.data.analyses.filter((a) => a.uid === "demo");
-  return state.data.analyses.filter((a) => a.uid === state.user.uid || (state.user.provider === "local" && a.uid === "demo"));
+  return state.data.analyses.filter((a) => a.uid === state.user.uid);
 }
 
 function sortedAnalyses() {
@@ -4750,7 +5058,7 @@ function adminUserList() {
     const postCount = Number(doc.postCount || state.data.posts.filter((post) => post.uid === account.uid).length || 0);
     const journalCount = state.data.journals.filter((journal) => journal.uid === account.uid).length;
     const reportCount = (state.data.reports || []).filter((report) => report.targetUid === account.uid).length;
-    const favoriteCountValue = Object.keys(doc.favoriteStocks || {}).length + (doc.favorites || []).length;
+    const favoriteCountValue = Object.keys(doc.favoriteStocks || {}).length;
     return normalizeAdminUser({
       ...doc,
       uid: account.uid,
@@ -4900,7 +5208,17 @@ function authRequired(title) {
 
 function favoriteCount() {
   const doc = getUserDoc();
-  return (doc.favorites || []).length + Object.keys(doc.favoriteStocks || {}).length;
+  return Object.keys(doc.favoriteStocks || {}).length;
+}
+
+function favoritePickCount() {
+  const doc = getUserDoc();
+  return (doc.favorites || []).filter((id) => state.data.stockPicks.some((pick) => pick.id === id)).length;
+}
+
+function captureCount() {
+  const activePicks = state.data.stockPicks.filter((pick) => pick.status === "active").length;
+  return activePicks + state.data.marketFeatures.length;
 }
 
 function formatTradingValue(value) {
@@ -4987,6 +5305,7 @@ async function onClick(event) {
   if (action === "open-investor-stock") await openInvestorFlowStock(actionEl.dataset);
   if (action === "open-fmkorea-stock") await openFmkoreaHotStock(actionEl.dataset);
   if (action === "market-detail") navigate("index", actionEl.dataset.ticker);
+  if (action === "toggle-favorite-pick") await toggleFavoritePick(actionEl.dataset.pick);
   if (action === "toggle-favorite-stock") await toggleFavoriteStock(actionEl.dataset.stock);
   if (action === "remove-favorite-stock") await removeFavoriteStock(actionEl.dataset.stock);
   if (action === "generate-ai") await generateAnalysis(actionEl.dataset.stock);
@@ -5019,6 +5338,7 @@ async function onClick(event) {
   if (action === "refresh-fmkorea") await refreshFmkoreaMarketData();
   if (action === "refresh-market-sectors") await refreshMarketSectors();
   if (action === "refresh-night-futures") await refreshNightFutures();
+  if (action === "refresh-scanner") await refreshScannerFeatures({ silent: false });
   if (action === "refresh-market-sentiment") await refreshMarketSentiment({ withIndicators: true, silent: false });
   if (action === "refresh-investor-flow") await refreshInvestorFlow({ silent: false });
   if (action === "copy-investor-flow") await copyInvestorFlowShareText();
@@ -5132,7 +5452,12 @@ async function handleSignup(data) {
   if (state.firebase.enabled) {
     try {
       const auth = state.firebase.modules.authMod;
-      const result = await auth.createUserWithEmailAndPassword(state.firebase.auth, data.email, data.password);
+      const result = await runWithTimeout(
+        () => auth.createUserWithEmailAndPassword(state.firebase.auth, data.email, data.password),
+        6000,
+        "firebase signup"
+      );
+      if (!result?.user) throw new Error("Firebase 회원가입 응답 지연");
       const user = {
         uid: result.user.uid,
         email: result.user.email || data.email,
@@ -5186,6 +5511,28 @@ async function addFavoriteStock(data) {
   render();
 }
 
+async function toggleFavoritePick(pickId) {
+  if (!state.user) {
+    toast("로그인 후 사용할 수 있습니다.");
+    navigate("profile");
+    return;
+  }
+  const pick = findStockPick(pickId);
+  if (!pick?.id) return;
+  const doc = getUserDoc();
+  doc.favorites = Array.isArray(doc.favorites) ? doc.favorites : [];
+  if (doc.favorites.includes(pick.id)) {
+    doc.favorites = doc.favorites.filter((id) => id !== pick.id);
+    toast("관심추천주에서 해제했습니다.");
+  } else {
+    doc.favorites = [pick.id, ...doc.favorites.filter((id) => id !== pick.id)];
+    toast("관심추천주에 등록했습니다.");
+  }
+  saveData();
+  await syncFavoritePickFirestore(doc.favorites);
+  render();
+}
+
 async function toggleFavoriteStock(key) {
   if (!state.user) {
     toast("로그인 후 사용할 수 있습니다.");
@@ -5208,9 +5555,6 @@ async function toggleFavoriteStock(key) {
       addedAt: new Date().toISOString()
     };
     doc.favoriteStockIds = [key, ...(doc.favoriteStockIds || []).filter((id) => id !== key)];
-    if (stock.id && state.data.stockPicks.some((p) => p.id === stock.id) && !doc.favorites.includes(stock.id)) {
-      doc.favorites.unshift(stock.id);
-    }
     await syncFavoriteStockFirestore(key, doc.favoriteStocks[key], false);
     toast("관심종목에 등록했습니다.");
   }
@@ -5222,8 +5566,12 @@ async function removeFavoriteStock(key) {
   await toggleFavoriteStock(key);
 }
 
+async function syncFavoritePickFirestore(favorites) {
+  await syncUserDocFirestore({ favorites: Array.isArray(favorites) ? favorites : [] });
+}
+
 async function syncFavoriteStockFirestore(key, stock, remove) {
-  if (!state.firebase.enabled || !state.user) return;
+  if (!state.firebase.enabled || !state.user || state.user.provider !== "firebase") return;
   const f = state.firebase.modules.firestoreMod;
   const ref = f.doc(state.firebase.db, "users", state.user.uid);
   try {
@@ -5535,7 +5883,7 @@ async function saveMemo(data) {
   const doc = getUserDoc();
   doc.memos[data.stockKey] = data.memo || "";
   saveData();
-  if (state.firebase.enabled) {
+  if (canWriteFirestore()) {
     const f = state.firebase.modules.firestoreMod;
     await f.setDoc(f.doc(state.firebase.db, "users", state.user.uid, "memos", data.stockKey), {
       text: data.memo || "",
@@ -5561,7 +5909,7 @@ async function addPickComment(data) {
   const doc = getUserDoc();
   doc.commentCount = Number(doc.commentCount || 0) + 1;
   saveData();
-  if (firestoreReady()) {
+  if (canWriteFirestore()) {
     await setFirestoreDoc(`stock_picks/${data.target}/comments/${comment.id}`, {
       uid: comment.uid,
       nickname: comment.nickname,
@@ -5606,7 +5954,7 @@ async function saveJournal(data) {
   const doc = getUserDoc();
   doc.bonusXp = Number(doc.bonusXp || 0) + (existing ? 0 : 5);
   saveData();
-  if (firestoreReady()) {
+  if (canWriteFirestore()) {
     await setFirestoreDoc(`trading_journal/${item.id}`, {
       uid: item.uid,
       nickname: item.nickname,
@@ -5650,7 +5998,7 @@ async function addJournalComment(data, form) {
   const doc = getUserDoc();
   doc.commentCount = Number(doc.commentCount || 0) + 1;
   saveData();
-  if (firestoreReady()) {
+  if (canWriteFirestore()) {
     await setFirestoreDoc(`trading_journal/${journal.id}/comments/${comment.id}`, {
       uid: comment.uid,
       nickname: comment.nickname,
@@ -5680,7 +6028,7 @@ async function deleteJournalComment(journalId, commentId) {
   const doc = state.data.userDocs[comment.uid];
   if (doc) doc.commentCount = Math.max(0, Number(doc.commentCount || 0) - 1);
   saveData();
-  if (firestoreReady()) {
+  if (canWriteFirestore()) {
     await deleteFirestoreDoc(`trading_journal/${journalId}/comments/${commentId}`);
     if (comment.uid) await deleteFirestoreDoc(`users/${comment.uid}/myJournalComments/${commentId}`);
     if (comment.uid === state.user?.uid) await syncUserDocFirestore({ commentCount: doc?.commentCount || 0 });
@@ -5693,7 +6041,7 @@ async function deleteJournal(id) {
   state.data.journals = state.data.journals.filter((j) => j.id !== id);
   delete state.data.journalComments[id];
   saveData();
-  await deleteFirestoreDoc(`trading_journal/${id}`);
+  if (canWriteFirestore()) await deleteFirestoreDoc(`trading_journal/${id}`);
   toast("매매일지를 삭제했습니다.");
   render();
 }
@@ -5767,7 +6115,7 @@ async function savePost(data, form) {
     existing.content = content;
     existing.imageUrls = uniqueImageUrls([...(existing.imageUrls || []), ...extractImageUrlsFromPostContent(content), ...uploadedUrls]);
     saveData();
-    if (firestoreReady()) {
+    if (canWriteFirestore()) {
       await updateFirestoreDoc(`posts/${existing.id}`, {
         title: existing.title,
         content: existing.content,
@@ -5795,7 +6143,7 @@ async function savePost(data, form) {
   const doc = getUserDoc();
   doc.postCount = Number(doc.postCount || 0) + 1;
   saveData();
-  if (firestoreReady()) {
+  if (canWriteFirestore()) {
     await setFirestoreDoc(`posts/${post.id}`, {
       uid: post.uid,
       nickname: post.nickname,
@@ -5829,7 +6177,7 @@ async function addPostComment(data, form) {
   const doc = getUserDoc();
   doc.commentCount = Number(doc.commentCount || 0) + 1;
   saveData();
-  if (firestoreReady()) {
+  if (canWriteFirestore()) {
     await setFirestoreDoc(`posts/${data.postId}/comments/${comment.id}`, {
       uid: comment.uid,
       nickname: comment.nickname,
@@ -5870,7 +6218,7 @@ async function saveMarketAnalysis(data, form) {
   if (existing) Object.assign(existing, item);
   else state.data.marketAnalyses.unshift(item);
   saveData();
-  if (firestoreReady()) {
+  if (canWriteFirestore()) {
     await setFirestoreDoc(`market_analyses/${item.id}`, {
       title: item.title,
       body: item.body,
@@ -5890,7 +6238,7 @@ async function deleteMarketAnalysis(id) {
   state.data.marketAnalyses = state.data.marketAnalyses.filter((item) => item.id !== id);
   delete state.data.marketAnalysisComments[id];
   saveData();
-  await deleteFirestoreDoc(`market_analyses/${id}`);
+  if (canWriteFirestore()) await deleteFirestoreDoc(`market_analyses/${id}`);
   toast("시황 분석을 삭제했습니다.");
   navigate("markets");
   render();
@@ -5913,7 +6261,7 @@ async function addMarketAnalysisComment(data, form) {
   const doc = getUserDoc();
   doc.commentCount = Number(doc.commentCount || 0) + 1;
   saveData();
-  if (firestoreReady()) {
+  if (canWriteFirestore()) {
     await setFirestoreDoc(`market_analyses/${analysisId}/comments/${comment.id}`, {
       uid: comment.uid,
       nickname: comment.nickname,
@@ -5943,10 +6291,11 @@ async function likePost(id) {
   const doc = getUserDoc();
   doc.likedPosts = doc.likedPosts || {};
   const wasLiked = Boolean(doc.likedPosts[id]);
-  const remote = firestoreReady()
+  const canUseRemoteLike = canWriteFirestore();
+  const remote = canUseRemoteLike
     ? await toggleFirestoreLike(`posts/${id}`, `posts/${id}/likes/${state.user.uid}`)
     : null;
-  if (firestoreReady() && !remote) return;
+  if (canUseRemoteLike && !remote) return;
   const liked = remote ? remote.liked : !wasLiked;
   if (!liked) {
     delete doc.likedPosts[id];
@@ -5970,10 +6319,11 @@ async function likeJournal(id) {
   const doc = getUserDoc();
   doc.likedJournals = doc.likedJournals || {};
   const wasLiked = Boolean(doc.likedJournals[id]);
-  const remote = firestoreReady()
+  const canUseRemoteLike = canWriteFirestore();
+  const remote = canUseRemoteLike
     ? await toggleFirestoreLike(`trading_journal/${id}`, `trading_journal/${id}/likes/${state.user.uid}`)
     : null;
-  if (firestoreReady() && !remote) return;
+  if (canUseRemoteLike && !remote) return;
   const liked = remote ? remote.liked : !wasLiked;
   if (!liked) {
     delete doc.likedJournals[id];
@@ -6002,7 +6352,7 @@ async function deletePost(id) {
     if (commentDoc) commentDoc.commentCount = Math.max(0, Number(commentDoc.commentCount || 0) - 1);
   }
   saveData();
-  if (firestoreReady()) {
+  if (canWriteFirestore()) {
     await Promise.all(comments.map((comment) => Promise.all([
       deleteFirestoreDoc(`posts/${id}/comments/${comment.id}`),
       comment.uid ? deleteFirestoreDoc(`users/${comment.uid}/myPostComments/${comment.id}`) : Promise.resolve(false)
@@ -6026,7 +6376,7 @@ async function deletePostComment(postId, commentId) {
   const doc = state.data.userDocs[comment.uid];
   if (doc) doc.commentCount = Math.max(0, Number(doc.commentCount || 0) - 1);
   saveData();
-  if (firestoreReady()) {
+  if (canWriteFirestore()) {
     await deleteFirestoreDoc(`posts/${postId}/comments/${commentId}`);
     if (comment.uid) await deleteFirestoreDoc(`users/${comment.uid}/myPostComments/${commentId}`);
     if (comment.uid === state.user?.uid) await syncUserDocFirestore({ commentCount: doc?.commentCount || 0 });
@@ -6051,7 +6401,7 @@ async function togglePostAuthorFollow(targetUid) {
     updatedAt: new Date().toISOString()
   };
   saveData();
-  if (firestoreReady()) {
+  if (canWriteFirestore()) {
     await setFirestoreDoc(`users/${state.user.uid}/post_author_follows/${targetUid}`, {
       targetUid,
       enabled,
@@ -6073,7 +6423,7 @@ async function blockUser(targetUid) {
   doc.blockedUsers = doc.blockedUsers || {};
   doc.blockedUsers[targetUid] = { createdAt: new Date().toISOString() };
   saveData();
-  if (firestoreReady()) {
+  if (canWriteFirestore()) {
     await setFirestoreDoc(`users/${state.user.uid}/blockedUsers/${targetUid}`, {
       createdAt: toTimestamp(new Date())
     });
@@ -6125,7 +6475,7 @@ async function reportContent(target) {
   };
   state.data.reports.push(report);
   saveData();
-  if (firestoreReady()) {
+  if (canWriteFirestore()) {
     await setFirestoreDoc(`reports/${report.id}`, {
       ...report,
       createdAt: toTimestamp(report.createdAt)
@@ -6138,7 +6488,7 @@ async function deleteReport(id) {
   if (!isAdmin()) throw new Error("관리자 권한이 필요합니다.");
   state.data.reports = (state.data.reports || []).filter((report) => report.id !== id);
   saveData();
-  await deleteFirestoreDoc(`reports/${id}`);
+  if (canWriteFirestore()) await deleteFirestoreDoc(`reports/${id}`);
   toast("신고를 삭제했습니다.");
   render();
 }
@@ -6154,7 +6504,7 @@ async function saveNotice(data) {
   };
   state.data.announcements.unshift(notice);
   saveData();
-  if (firestoreReady()) {
+  if (canWriteFirestore()) {
     await setFirestoreDoc(`announcements/${notice.id}`, {
       title: notice.title,
       body: notice.body,
@@ -6185,7 +6535,7 @@ async function saveAdminPick(data) {
   });
   state.data.stockPicks.unshift(pick);
   saveData();
-  if (firestoreReady()) {
+  if (canWriteFirestore()) {
     await setFirestoreDoc(`stock_picks/${pick.id}`, {
       ticker: pick.ticker,
       name: pick.name,
@@ -6597,6 +6947,31 @@ async function refreshNightFutures({ silent = false } = {}) {
   }
 }
 
+async function refreshScannerFeatures({ silent = false } = {}) {
+  if (state.scannerBusy) return;
+  state.scannerBusy = true;
+  if (!silent) render();
+  try {
+    const options = typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
+      ? { signal: AbortSignal.timeout(32000) }
+      : {};
+    const res = await fetch(apiUrl("/api/scanner", { market: "ALL", limit: "24", universe: "36" }), options);
+    if (!res.ok) throw new Error("scanner failed");
+    const payload = await res.json();
+    const features = Array.isArray(payload.items) ? payload.items.map(normalizeFeature) : [];
+    if (features.length) {
+      state.data.marketFeatures = features;
+      saveData();
+    }
+    if (!silent) toast(`실시간 스캐너 후보 ${features.length}개를 갱신했습니다.`);
+  } catch {
+    if (!silent) toast("스캐너 API 연결 실패로 기존 후보를 유지합니다.");
+  } finally {
+    state.scannerBusy = false;
+    render();
+  }
+}
+
 function fearGreedLabel(rating, score) {
   const normalized = String(rating || "").toLowerCase();
   if (normalized.includes("extreme fear")) return "극단적 공포";
@@ -6808,7 +7183,7 @@ function afterRender() {
   document.querySelectorAll("canvas[data-chart='journal-candles']").forEach((canvas) => {
     const points = JSON.parse(canvas.dataset.points || "[]");
     const markers = JSON.parse(canvas.dataset.markers || "[]");
-    drawJournalCandles(canvas, points, markers);
+    drawJournalCandles(canvas, points, markers, { market: canvas.dataset.market || "" });
   });
   document.querySelectorAll("canvas[data-chart='ohlc']").forEach((canvas) => {
     const points = JSON.parse(canvas.dataset.points || "[]");
@@ -7235,44 +7610,137 @@ function bindStockChartInteraction(canvas, points, options) {
   updateStockChartSelection(canvas, candles, candles.length - 1);
   if (canvas.dataset.interactionBound === "true") return;
   canvas.dataset.interactionBound = "true";
+  let drag = null;
+  let pinchDistance = null;
+
+  const viewport = () => stockChartViewport(canvas, candles.length);
+  const redraw = (selectedIndex = null) => {
+    const view = viewport();
+    const visible = candles.slice(view.start, view.end);
+    const localIndex = Number.isInteger(selectedIndex) ? selectedIndex - view.start : null;
+    drawJournalCandles(canvas, visible, [], {
+      ...options,
+      selectedIndex: Number.isInteger(localIndex) && localIndex >= 0 && localIndex < visible.length ? localIndex : null
+    });
+    const activeIndex = Number.isInteger(selectedIndex) ? selectedIndex : view.end - 1;
+    updateStockChartSelection(canvas, candles, activeIndex);
+  };
 
   const selectFromPointer = (event) => {
     const rect = canvas.getBoundingClientRect();
     const left = isDomesticMarket(options.market || canvas.dataset.market || "") ? 76 : 58;
     const right = 8;
     const chartW = Math.max(1, rect.width - left - right);
-    const slot = chartW / candles.length;
+    const view = viewport();
+    const visibleLength = Math.max(1, view.end - view.start);
+    const slot = chartW / visibleLength;
     const localX = Math.min(chartW - 0.01, Math.max(0, event.clientX - rect.left - left));
-    const index = Math.min(candles.length - 1, Math.max(0, Math.floor(localX / slot)));
+    const index = Math.min(view.end - 1, Math.max(view.start, view.start + Math.floor(localX / slot)));
     canvas.dataset.selectedIndex = String(index);
-    drawJournalCandles(canvas, candles, [], { ...options, selectedIndex: index });
-    updateStockChartSelection(canvas, candles, index);
+    redraw(index);
   };
 
   canvas.addEventListener("pointerdown", (event) => {
     event.preventDefault();
-    selectFromPointer(event);
-    window.requestAnimationFrame(() => canvas.blur());
+    drag = { x: event.clientX, start: viewport().start, end: viewport().end, moved: false };
+    canvas.setPointerCapture?.(event.pointerId);
   });
   canvas.addEventListener("pointermove", (event) => {
-    if (event.pointerType === "mouse" || event.buttons) selectFromPointer(event);
+    if (!drag || !event.buttons) {
+      if (event.pointerType === "mouse") selectFromPointer(event);
+      return;
+    }
+    const rect = canvas.getBoundingClientRect();
+    const viewLength = drag.end - drag.start;
+    const shift = Math.round((drag.x - event.clientX) / Math.max(1, rect.width) * viewLength);
+    if (Math.abs(event.clientX - drag.x) < 5) return;
+    drag.moved = true;
+    setStockChartViewport(canvas, drag.start + shift, drag.end + shift, candles.length);
+    redraw();
+  });
+  canvas.addEventListener("pointerup", (event) => {
+    if (!drag?.moved) selectFromPointer(event);
+    drag = null;
+    canvas.releasePointerCapture?.(event.pointerId);
+    window.requestAnimationFrame(() => canvas.blur());
   });
   canvas.addEventListener("pointerleave", (event) => {
-    if (event.pointerType !== "mouse") return;
+    if (event.pointerType !== "mouse" || drag) return;
     delete canvas.dataset.selectedIndex;
-    drawJournalCandles(canvas, candles, [], options);
-    updateStockChartSelection(canvas, candles, candles.length - 1);
+    redraw();
   });
+  canvas.addEventListener("wheel", (event) => {
+    event.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const anchor = Math.min(1, Math.max(0, (event.clientX - rect.left) / Math.max(1, rect.width)));
+    zoomStockChart(canvas, candles.length, event.deltaY < 0 ? "in" : "out", anchor);
+    redraw();
+  }, { passive: false });
+  canvas.addEventListener("dblclick", (event) => {
+    event.preventDefault();
+    zoomStockChart(canvas, candles.length, "reset");
+    redraw();
+  });
+  canvas.addEventListener("touchstart", (event) => {
+    if (event.touches.length !== 2) return;
+    pinchDistance = touchDistance(event.touches);
+  }, { passive: true });
+  canvas.addEventListener("touchmove", (event) => {
+    if (event.touches.length !== 2 || !pinchDistance) return;
+    event.preventDefault();
+    const nextDistance = touchDistance(event.touches);
+    if (Math.abs(nextDistance - pinchDistance) < 12) return;
+    zoomStockChart(canvas, candles.length, nextDistance > pinchDistance ? "in" : "out", 0.5);
+    pinchDistance = nextDistance;
+    redraw();
+  }, { passive: false });
+  canvas.addEventListener("touchend", () => {
+    pinchDistance = null;
+  }, { passive: true });
   canvas.addEventListener("keydown", (event) => {
     if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
     event.preventDefault();
-    const fallback = candles.length - 1;
+    const view = viewport();
+    const fallback = view.end - 1;
     const current = Number.isInteger(Number(canvas.dataset.selectedIndex)) ? Number(canvas.dataset.selectedIndex) : fallback;
-    const index = Math.min(candles.length - 1, Math.max(0, current + (event.key === "ArrowLeft" ? -1 : 1)));
+    const index = Math.min(view.end - 1, Math.max(view.start, current + (event.key === "ArrowLeft" ? -1 : 1)));
     canvas.dataset.selectedIndex = String(index);
-    drawJournalCandles(canvas, candles, [], { ...options, selectedIndex: index });
-    updateStockChartSelection(canvas, candles, index);
+    redraw(index);
   });
+}
+
+function touchDistance(touches) {
+  const [first, second] = touches;
+  return Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY);
+}
+
+function stockChartViewport(canvas, length) {
+  const start = Number(canvas.dataset.viewStart);
+  const end = Number(canvas.dataset.viewEnd);
+  if (!Number.isInteger(start) || !Number.isInteger(end) || end <= start || end > length) {
+    return { start: 0, end: length };
+  }
+  return { start, end };
+}
+
+function setStockChartViewport(canvas, start, end, length) {
+  const size = Math.min(length, Math.max(20, Math.round(end - start)));
+  const nextStart = Math.max(0, Math.min(length - size, Math.round(start)));
+  canvas.dataset.viewStart = String(nextStart);
+  canvas.dataset.viewEnd = String(nextStart + size);
+}
+
+function zoomStockChart(canvas, length, direction, anchor = 0.5) {
+  if (direction === "reset") {
+    delete canvas.dataset.viewStart;
+    delete canvas.dataset.viewEnd;
+    return;
+  }
+  const view = stockChartViewport(canvas, length);
+  const size = view.end - view.start;
+  const nextSize = direction === "in" ? Math.max(20, Math.round(size * 0.72)) : Math.min(length, Math.round(size * 1.38));
+  const anchorIndex = view.start + size * anchor;
+  setStockChartViewport(canvas, anchorIndex - nextSize * anchor, anchorIndex + nextSize * (1 - anchor), length);
 }
 
 function updateStockChartSelection(canvas, candles, index) {

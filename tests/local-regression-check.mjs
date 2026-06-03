@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { dirname, join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -10,7 +10,8 @@ const appUrl = process.env.WOOGI_APP_URL || "http://127.0.0.1:8019";
 
 const pyEnv = {
   ...process.env,
-  PYTHONPYCACHEPREFIX: process.env.PYTHONPYCACHEPREFIX || "/tmp"
+  PYTHONPYCACHEPREFIX: process.env.PYTHONPYCACHEPREFIX || "/tmp",
+  PYTHONPATH: [root, process.env.PYTHONPATH].filter(Boolean).join(delimiter)
 };
 
 const checks = [
@@ -18,7 +19,7 @@ const checks = [
   ["functions entry syntax", process.execPath, ["--check", "functions/index.js"]],
   ["functions analysis syntax", process.execPath, ["--check", "functions/analysis.js"]],
   ["functions night futures syntax", process.execPath, ["--check", "functions/nightFutures.js"]],
-  ["server syntax", "python3", ["-m", "py_compile", "server.py", "tests/server-log-message-check.py", "tests/server-browser-config-check.py", "tests/server-security-headers-check.py"], { env: pyEnv }],
+  ["server syntax", "python3", ["-m", "py_compile", "server.py", "scanner_engine.py", "tests/server-log-message-check.py", "tests/server-browser-config-check.py", "tests/server-security-headers-check.py"], { env: pyEnv }],
   ["static contract", process.execPath, ["tests/static-check.mjs"]],
   ["firestore like integrity", process.execPath, ["tests/firestore-like-integrity-check.mjs"]],
   ["firestore write schema", process.execPath, ["tests/firestore-write-schema-check.mjs"]],
@@ -29,6 +30,7 @@ const checks = [
   ["server log handling", "python3", ["tests/server-log-message-check.py"], { env: pyEnv }],
   ["server browser config", "python3", ["tests/server-browser-config-check.py"], { env: pyEnv }],
   ["server security headers", "python3", ["tests/server-security-headers-check.py"], { env: pyEnv }],
+  ["scanner engine", "python3", ["tests/scanner-engine-check.py"], { env: pyEnv }],
   ["fmkorea parser", "python3", ["tests/fmkorea-parser-check.py"], { env: pyEnv }],
   ["naver market sectors parser", "python3", ["tests/naver-market-sectors-parser-check.py"], { env: pyEnv }],
   ["night futures normalize", process.execPath, ["tests/night-futures-normalize-check.mjs"]],

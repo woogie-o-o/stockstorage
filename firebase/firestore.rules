@@ -11,7 +11,8 @@ service cloud.firestore {
         && (
           request.auth.uid in [
             "1KzEXKZMoFaYOymYyoI283AR3Y32",
-            "v4a3ClF3FhWGXsGnZ29wyvQNSCX2"
+            "v4a3ClF3FhWGXsGnZ29wyvQNSCX2",
+            "Iw0Oyfn2SuONCkd5au9pnAUXGN52"
           ]
           || request.auth.token.admin == true
         );

@@ -92,10 +92,23 @@ function textSummaryExpression() {
 await send("Runtime.enable");
 await send("Page.enable");
 await navigate("#profile");
-await evaluate(`localStorage.clear();`);
+await evaluate(`
+  (() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    return true;
+  })()
+`);
 await send("Page.reload", { ignoreCache: true });
 await waitFor(`Boolean(document.querySelector("main"))`);
 await navigate("#profile");
+await evaluate(`
+  (() => {
+    const logout = document.querySelector('[data-action="logout"]');
+    if (logout) logout.click();
+    return true;
+  })()
+`);
 await waitFor(`Boolean(document.querySelector('form[data-form="signup"]'))`);
 
 await evaluate(`
@@ -108,7 +121,7 @@ await evaluate(`
     return true;
   })()
 `);
-await waitFor(`document.body.textContent.includes(${JSON.stringify(email)}) && document.body.textContent.includes("프로필")`);
+await waitFor(`document.body.textContent.includes(${JSON.stringify(email)}) && document.body.textContent.includes("프로필")`, 18000);
 
 await navigate("#stock/KS_005930");
 await waitFor(`document.body.textContent.includes("삼성전자") && Boolean(document.querySelector('[data-action="toggle-favorite-stock"]'))`);
@@ -118,7 +131,51 @@ await evaluate(`
     return true;
   })()
 `);
-await waitFor(`document.body.textContent.includes("관심 해제")`);
+await waitFor(`
+  (() => {
+    const session = JSON.parse(localStorage.getItem("woogi-stock-session-v1"));
+    const data = JSON.parse(localStorage.getItem("woogi-stock-data-v1"));
+    const doc = data.userDocs[session.uid];
+    return Boolean(doc.favoriteStocks.KS_005930) && !doc.favorites.includes("pick_samsung");
+  })()
+`);
+await evaluate(`
+  (() => {
+    const session = JSON.parse(localStorage.getItem("woogi-stock-session-v1"));
+    const data = JSON.parse(localStorage.getItem("woogi-stock-data-v1"));
+    const doc = data.userDocs[session.uid];
+    doc.favorites = ["KS_005930", ...(doc.favorites || [])];
+    localStorage.setItem("woogi-stock-data-v1", JSON.stringify(data));
+    return true;
+  })()
+`);
+await send("Page.reload", { ignoreCache: true });
+await waitFor(`Boolean(document.querySelector("main"))`);
+await navigate("#favorites");
+await waitFor(`
+  (() => {
+    const session = JSON.parse(localStorage.getItem("woogi-stock-session-v1"));
+    const data = JSON.parse(localStorage.getItem("woogi-stock-data-v1"));
+    const doc = data.userDocs[session.uid];
+    return Boolean(doc.favoriteStocks.KS_005930) && !doc.favorites.includes("KS_005930");
+  })()
+`);
+await navigate("#stock/KS_005930");
+await waitFor(`document.body.textContent.includes("삼성전자") && Boolean(document.querySelector('[data-action="toggle-favorite-pick"][data-pick="pick_samsung"]'))`);
+await evaluate(`
+  (() => {
+    document.querySelector('[data-action="toggle-favorite-pick"][data-pick="pick_samsung"]').click();
+    return true;
+  })()
+`);
+await waitFor(`
+  (() => {
+    const session = JSON.parse(localStorage.getItem("woogi-stock-session-v1"));
+    const data = JSON.parse(localStorage.getItem("woogi-stock-data-v1"));
+    const doc = data.userDocs[session.uid];
+    return Boolean(doc.favoriteStocks.KS_005930) && doc.favorites.includes("pick_samsung");
+  })()
+`);
 
 const memoText = `QA memo ${qaStamp}`;
 await evaluate(`

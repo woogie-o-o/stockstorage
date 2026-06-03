@@ -4,14 +4,19 @@ import json
 import mimetypes
 import ast
 import csv
+import base64
+import hashlib
 import html
 import io
 import re
+import secrets
+import socket
 import sys
 import urllib.error
 import urllib.parse
 import urllib.request
 import os
+import zipfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from email.utils import parsedate_to_datetime
@@ -20,8 +25,32 @@ from pathlib import Path
 from time import time
 from xml.etree import ElementTree
 
+from scanner_engine import build_scanner_feature
+
 
 ROOT = Path(__file__).resolve().parent
+
+
+def load_dotenv_file(path: Path):
+    if not path.exists():
+        return
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+load_dotenv_file(ROOT / ".env")
+
 HOST = os.environ.get("WOOGI_HOST", "127.0.0.1")
 PORT = int(os.environ.get("WOOGI_PORT") or os.environ.get("PORT") or "8019")
 BROWSER_FIREBASE_ENV_FIELDS = (
@@ -53,6 +82,9 @@ STOOQ_SYMBOLS = {
 }
 HTTP_CACHE: dict[tuple[str, tuple[tuple[str, str], ...]], tuple[float, bytes]] = {}
 CACHE_TTL_SECONDS = 60
+SCANNER_CACHE: dict[tuple[str, int, int], tuple[float, dict]] = {}
+SCANNER_CACHE_TTL_SECONDS = 5 * 60
+DART_CORP_CODE_CACHE: dict[str, str] | None = None
 FMKOREA_LAST_SNAPSHOT: dict | None = None
 FMKOREA_RETRY_AFTER = 0.0
 INVESTOR_FLOW_SOURCES = [
@@ -425,6 +457,171 @@ def kis_keys_configured() -> bool:
     return bool(app_key and app_secret)
 
 
+def kis_credentials() -> tuple[str, str]:
+    return (
+        (os.environ.get("KIS_APP_KEY") or os.environ.get("WOOGI_KIS_APP_KEY") or "").strip(),
+        (os.environ.get("KIS_APP_SECRET") or os.environ.get("WOOGI_KIS_APP_SECRET") or "").strip(),
+    )
+
+
+def get_kis_approval_key(app_key: str, app_secret: str) -> str:
+    request = urllib.request.Request(
+        "https://openapi.koreainvestment.com:9443/oauth2/Approval",
+        data=json.dumps({
+            "grant_type": "client_credentials",
+            "appkey": app_key,
+            "secretkey": app_secret,
+        }).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=10) as response:
+        payload = json.loads(response.read().decode("utf-8", errors="replace"))
+    approval_key = str(payload.get("approval_key") or "").strip()
+    if not approval_key:
+        raise ValueError("KIS approval_key missing")
+    return approval_key
+
+
+def kis_frame_message(payload: str) -> bytes:
+    raw = payload.encode("utf-8")
+    mask = secrets.token_bytes(4)
+    header = bytearray([0x81])
+    length = len(raw)
+    if length < 126:
+        header.append(0x80 | length)
+    elif length < 65536:
+        header.extend([0x80 | 126, (length >> 8) & 0xFF, length & 0xFF])
+    else:
+        header.append(0x80 | 127)
+        header.extend(length.to_bytes(8, "big"))
+    masked = bytes(byte ^ mask[index % 4] for index, byte in enumerate(raw))
+    return bytes(header) + mask + masked
+
+
+def read_exact(sock: socket.socket, length: int) -> bytes:
+    chunks = []
+    remaining = length
+    while remaining > 0:
+        chunk = sock.recv(remaining)
+        if not chunk:
+            raise TimeoutError("websocket closed")
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    return b"".join(chunks)
+
+
+def read_kis_websocket_text(sock: socket.socket) -> str:
+    first, second = read_exact(sock, 2)
+    opcode = first & 0x0F
+    length = second & 0x7F
+    if length == 126:
+        length = int.from_bytes(read_exact(sock, 2), "big")
+    elif length == 127:
+        length = int.from_bytes(read_exact(sock, 8), "big")
+    masked = bool(second & 0x80)
+    mask = read_exact(sock, 4) if masked else b""
+    payload = read_exact(sock, length) if length else b""
+    if masked:
+        payload = bytes(byte ^ mask[index % 4] for index, byte in enumerate(payload))
+    if opcode == 0x8:
+        raise TimeoutError("websocket closed")
+    if opcode == 0x9:
+        sock.sendall(bytes([0x8A, 0x00]))
+        return ""
+    return payload.decode("utf-8", errors="replace")
+
+
+def parse_kis_night_futures_tick(message: str, symbol: str) -> dict | None:
+    raw = str(message or "")
+    if not raw or raw.startswith("{"):
+        return None
+    parts = raw.split("|")
+    if len(parts) < 4 or parts[1] != "H0UPANC0":
+        return None
+    payload = parts[3]
+    records = payload.split(f"^{symbol}") if f"^{symbol}" in payload else [payload]
+    fields = (records[0] or payload).split("^")
+    if len(fields) < 6:
+        return None
+    price = parse_first_number(fields[3])
+    if not price or price <= 0:
+        return None
+    return {
+        "price": price,
+        "change": parse_first_number(fields[4]) or 0,
+        "changeRate": parse_first_number(fields[5]) or 0,
+    }
+
+
+def fetch_kis_night_futures_tick(symbol: str, timeout: int = 18) -> dict:
+    app_key, app_secret = kis_credentials()
+    if not app_key or not app_secret:
+        raise ValueError("KIS keys missing")
+    approval_key = get_kis_approval_key(app_key, app_secret)
+    host = "ops.koreainvestment.com"
+    port = 21000
+    sock = socket.create_connection((host, port), timeout=timeout)
+    sock.settimeout(timeout)
+    try:
+        ws_key = base64.b64encode(secrets.token_bytes(16)).decode("ascii")
+        handshake = (
+            "GET / HTTP/1.1\r\n"
+            f"Host: {host}:{port}\r\n"
+            "Upgrade: websocket\r\n"
+            "Connection: Upgrade\r\n"
+            f"Sec-WebSocket-Key: {ws_key}\r\n"
+            "Sec-WebSocket-Version: 13\r\n\r\n"
+        )
+        sock.sendall(handshake.encode("ascii"))
+        response = b""
+        while b"\r\n\r\n" not in response:
+            response += sock.recv(4096)
+            if len(response) > 16384:
+                break
+        if b" 101 " not in response.split(b"\r\n", 1)[0]:
+            raise TimeoutError("KIS websocket handshake failed")
+        expected = base64.b64encode(hashlib.sha1((ws_key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii")).digest())
+        if expected not in response:
+            raise TimeoutError("KIS websocket accept mismatch")
+        subscribe = json.dumps({
+            "header": {
+                "approval_key": approval_key,
+                "custtype": "P",
+                "tr_type": "1",
+                "content-type": "utf-8",
+            },
+            "body": {"input": {"tr_id": "H0UPANC0", "tr_key": symbol}},
+        }, ensure_ascii=False)
+        sock.sendall(kis_frame_message(subscribe))
+        deadline = time() + timeout
+        while time() < deadline:
+            message = read_kis_websocket_text(sock)
+            if not message:
+                continue
+            if message.startswith("{"):
+                try:
+                    payload = json.loads(message)
+                except json.JSONDecodeError:
+                    continue
+                if payload.get("header", {}).get("tr_id") == "PINGPONG":
+                    sock.sendall(kis_frame_message(message))
+                    continue
+                body = payload.get("body") or {}
+                if body.get("rt_cd") == "9":
+                    raise ValueError(str(body.get("msg_cd") or body.get("msg1") or "KIS websocket rejected"))
+                continue
+            tick = parse_kis_night_futures_tick(message, symbol)
+            if tick:
+                return tick
+        raise TimeoutError("KIS night futures timeout")
+    finally:
+        try:
+            sock.close()
+        except OSError:
+            pass
+
+
 def load_night_futures_snapshot() -> dict:
     raw = os.environ.get("WOOGI_NIGHT_FUTURES_SNAPSHOT", "").strip()
     file_path = os.environ.get("WOOGI_NIGHT_FUTURES_HISTORY_FILE", "").strip()
@@ -464,6 +661,20 @@ def normalize_night_futures_history(items) -> list[dict]:
 def collect_night_futures() -> dict:
     snapshot = load_night_futures_snapshot()
     history = normalize_night_futures_history(snapshot.get("history"))
+    session = night_futures_session()
+    live_error = ""
+    live_tick = {}
+    configured = kis_keys_configured()
+    if configured and session.get("active") and not snapshot.get("price"):
+        symbol = str(snapshot.get("symbol") or get_night_futures_symbol())
+        try:
+            live_tick = fetch_kis_night_futures_tick(symbol)
+            now = kst_now().isoformat(timespec="seconds")
+            live_tick = {**live_tick, "time": now, "symbol": symbol, "source": "KIS OpenAPI"}
+            history.append(live_tick)
+            snapshot = {**snapshot, **live_tick, "updatedAt": now}
+        except (urllib.error.URLError, TimeoutError, ValueError, OSError) as error:
+            live_error = str(error)[:160]
     latest = history[-1] if history else {}
     price = parse_first_number(snapshot.get("price")) or latest.get("price")
     change = parse_first_number(snapshot.get("change")) or latest.get("change")
@@ -473,13 +684,18 @@ def collect_night_futures() -> dict:
         change = price - previous_close
     if change_rate is None and change is not None and previous_close:
         change_rate = change / previous_close * 100
-    configured = kis_keys_configured()
     available = bool(price and price > 0)
-    mode = "local-snapshot" if available else ("configured-awaiting-collector" if configured else "not-configured")
+    mode = "kis-live" if live_tick else ("local-snapshot" if available else ("configured-awaiting-collector" if configured else "not-configured"))
     message = (
-        "KIS 연동 값이 준비되었습니다."
+        "KIS 실시간 스냅샷을 수신했습니다."
+        if live_tick
+        else "KIS 연동 값이 준비되었습니다."
         if available
-        else ("KIS 키는 설정됐지만 야간선물 스냅샷이 아직 없습니다." if configured else "KIS_APP_KEY/KIS_APP_SECRET 미설정")
+        else (
+            f"KIS 키는 설정됐지만 현재 수집 대기 중입니다. {live_error}".strip()
+            if configured and live_error
+            else ("KIS 키는 설정됐지만 야간선물 스냅샷이 아직 없습니다." if configured else "KIS_APP_KEY/KIS_APP_SECRET 미설정")
+        )
     )
     return {
         "name": "KOSPI200 야간선물",
@@ -489,7 +705,7 @@ def collect_night_futures() -> dict:
         "available": available,
         "mode": mode,
         "message": message,
-        "session": night_futures_session(),
+        "session": session,
         "price": price,
         "change": change,
         "changeRate": change_rate,
@@ -789,6 +1005,81 @@ def fetch_market_stock_list(market: str):
         for stock in (page.get("stocks") or [])
         if isinstance(stock, dict)
     ]
+
+
+def parse_naver_stock_number(stock: dict, key: str, fallback: str = "") -> float:
+    value = stock.get(key)
+    if value in {None, ""}:
+        value = stock.get(fallback) if fallback else 0
+    try:
+        return float(str(value or 0).replace(",", ""))
+    except ValueError:
+        return 0.0
+
+
+def fetch_scanner_universe(market: str, page_limit: int = 3):
+    markets = ["KOSPI", "KOSDAQ"] if market == "ALL" else ["KOSDAQ" if market == "KQ" else "KOSPI"]
+    futures = []
+    with ThreadPoolExecutor(max_workers=min(8, len(markets) * page_limit)) as executor:
+        for market_name in markets:
+            for page in range(1, page_limit + 1):
+                futures.append(executor.submit(fetch_market_stock_page, market_name, page, 100))
+        pages = [future.result() for future in as_completed(futures)]
+    stocks = [
+        stock
+        for page in pages
+        for stock in (page.get("stocks") or [])
+        if isinstance(stock, dict) and is_plain_listed_stock(stock)
+    ]
+    return sorted(
+        stocks,
+        key=lambda stock: parse_naver_stock_number(stock, "accumulatedTradingValueRaw"),
+        reverse=True,
+    )
+
+
+def scan_market_opportunities(market: str = "ALL", limit: int = 20, universe_limit: int = 30):
+    market = market.upper()
+    if market not in {"ALL", "KS", "KQ"}:
+        market = "ALL"
+    limit = max(1, min(int(limit), 50))
+    universe_limit = max(limit, min(int(universe_limit), 120))
+    cache_key = (market, limit, universe_limit)
+    cached = SCANNER_CACHE.get(cache_key)
+    now = time()
+    if cached and now - cached[0] < SCANNER_CACHE_TTL_SECONDS:
+        return cached[1]
+
+    candidates = fetch_scanner_universe(market)[:universe_limit]
+
+    def build(stock: dict):
+        ticker = str(stock.get("itemCode") or stock.get("reutersCode") or "")
+        if not ticker:
+            return None
+        try:
+            history = naver_history(ticker, "1y")
+            return build_scanner_feature(stock, history.get("points") or [])
+        except (urllib.error.URLError, TimeoutError, ValueError, SyntaxError, OSError):
+            return None
+
+    with ThreadPoolExecutor(max_workers=min(10, len(candidates) or 1)) as executor:
+        features = [
+            feature
+            for feature in (future.result() for future in as_completed([executor.submit(build, stock) for stock in candidates]))
+            if feature
+        ]
+    features.sort(key=lambda item: (float(item.get("score") or 0), float(item.get("tradingValue") or 0)), reverse=True)
+    payload = {
+        "items": features[:limit],
+        "source": "Naver Finance Scanner",
+        "updatedAt": datetime.utcnow().isoformat() + "Z",
+        "market": market,
+        "universeCount": len(candidates),
+        "scoredCount": len(features),
+        "method": "liquidity prefilter + trend/momentum/breakout/risk score",
+    }
+    SCANNER_CACHE[cache_key] = (now, payload)
+    return payload
 
 
 def count_market_breadth(stocks: list[dict]):
@@ -1434,6 +1725,85 @@ def naver_disclosures(ticker: str, market: str):
     return items
 
 
+def dart_api_key() -> str:
+    return (os.environ.get("DART_API_KEY") or os.environ.get("WOOGI_DART_API_KEY") or "").strip()
+
+
+def load_dart_corp_codes() -> dict[str, str]:
+    global DART_CORP_CODE_CACHE
+    if DART_CORP_CODE_CACHE is not None:
+        return DART_CORP_CODE_CACHE
+    key = dart_api_key()
+    if not key:
+        DART_CORP_CODE_CACHE = {}
+        return DART_CORP_CODE_CACHE
+    url = "https://opendart.fss.or.kr/api/corpCode.xml?" + urllib.parse.urlencode({"crtfc_key": key})
+    try:
+        raw = fetch_raw(url, timeout=20)
+        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+            xml_name = archive.namelist()[0]
+            xml_text = archive.read(xml_name).decode("utf-8", errors="replace")
+        root = ElementTree.fromstring(xml_text)
+    except (urllib.error.URLError, TimeoutError, zipfile.BadZipFile, ElementTree.ParseError, OSError, IndexError):
+        DART_CORP_CODE_CACHE = {}
+        return DART_CORP_CODE_CACHE
+    codes = {}
+    for item in root.findall(".//list"):
+        stock_code = (item.findtext("stock_code") or "").strip()
+        corp_code = (item.findtext("corp_code") or "").strip()
+        if stock_code and corp_code:
+            codes[stock_code.upper()] = corp_code
+    DART_CORP_CODE_CACHE = codes
+    return DART_CORP_CODE_CACHE
+
+
+def dart_disclosures(ticker: str, market: str):
+    if market not in {"KS", "KQ"} or not IS_NUMERIC_CODE.match(ticker):
+        return []
+    key = dart_api_key()
+    if not key:
+        return []
+    corp_code = load_dart_corp_codes().get(ticker.upper())
+    if not corp_code:
+        return []
+    today = kst_now()
+    url = "https://opendart.fss.or.kr/api/list.json?" + urllib.parse.urlencode({
+        "crtfc_key": key,
+        "corp_code": corp_code,
+        "bgn_de": (today - timedelta(days=180)).strftime("%Y%m%d"),
+        "end_de": today.strftime("%Y%m%d"),
+        "page_count": "10",
+    })
+    try:
+        data = fetch_json(url, timeout=12)
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, ValueError, OSError):
+        return []
+    if str(data.get("status") or "") not in {"000", ""}:
+        return []
+    items = []
+    for item in data.get("list") or []:
+        report_name = str(item.get("report_nm") or "").strip()
+        receipt_no = str(item.get("rcept_no") or "").strip()
+        if not report_name or not receipt_no:
+            continue
+        items.append({
+            "id": receipt_no,
+            "title": report_name,
+            "date": str(item.get("rcept_dt") or ""),
+            "submitter": str(item.get("corp_name") or ""),
+            "url": f"https://dart.fss.or.kr/dsaf001/main.do?rcpNo={urllib.parse.quote(receipt_no)}",
+            "source": "OpenDART",
+        })
+    return items
+
+
+def fetch_disclosures(ticker: str, market: str):
+    dart_items = dart_disclosures(ticker, market)
+    if dart_items:
+        return {"items": dart_items, "source": "OpenDART"}
+    return {"items": naver_disclosures(ticker, market), "source": "Naver Finance Notice"}
+
+
 def yahoo_history(symbol: str, range_value: str, interval: str):
     encoded = urllib.parse.quote(symbol, safe="")
     url = (
@@ -1448,6 +1818,7 @@ def yahoo_history(symbol: str, range_value: str, interval: str):
     opens = quote.get("open") or []
     highs = quote.get("high") or []
     lows = quote.get("low") or []
+    volumes = quote.get("volume") or []
     points = []
     for idx, timestamp in enumerate(timestamps):
         close = closes[idx] if idx < len(closes) else None
@@ -1459,6 +1830,7 @@ def yahoo_history(symbol: str, range_value: str, interval: str):
             "high": highs[idx] if idx < len(highs) and isinstance(highs[idx], (int, float)) else close,
             "low": lows[idx] if idx < len(lows) and isinstance(lows[idx], (int, float)) else close,
             "close": close,
+            "volume": volumes[idx] if idx < len(volumes) and isinstance(volumes[idx], (int, float)) else 0,
         })
     return {"symbol": symbol, "points": points, "source": "Yahoo Finance"}
 
@@ -1627,6 +1999,7 @@ def naver_history(ticker: str, range_value: str = "1y"):
                 "high": float(row[2]),
                 "low": float(row[3]),
                 "close": float(row[4]),
+                "volume": float(row[5]) if len(row) > 5 else 0,
             })
         except (TypeError, ValueError):
             continue
@@ -1848,10 +2221,7 @@ class Handler(SimpleHTTPRequestHandler):
                 if not ticker:
                     json_response(self, 400, {"error": "ticker is required"})
                     return
-                json_response(self, 200, {
-                    "items": naver_disclosures(ticker, market),
-                    "source": "Naver Finance Notice",
-                })
+                json_response(self, 200, fetch_disclosures(ticker, market))
                 return
             if parsed.path == "/api/discussions":
                 ticker = (params.get("ticker") or [""])[0].strip().upper()
@@ -1867,6 +2237,12 @@ class Handler(SimpleHTTPRequestHandler):
             if parsed.path == "/api/search":
                 query = (params.get("q") or [""])[0]
                 json_response(self, 200, {"items": search_stocks(query)})
+                return
+            if parsed.path == "/api/scanner":
+                market = (params.get("market") or ["ALL"])[0].strip().upper()
+                limit = int((params.get("limit") or ["20"])[0])
+                universe_limit = int((params.get("universe") or ["30"])[0])
+                json_response(self, 200, scan_market_opportunities(market, limit, universe_limit))
                 return
             if parsed.path == "/healthz":
                 json_response(self, 200, {"ok": True})

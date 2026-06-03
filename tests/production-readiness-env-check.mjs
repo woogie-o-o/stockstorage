@@ -1,8 +1,11 @@
+import { existsSync, renameSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const localConfig = join(root, "config.local.js");
+const hiddenLocalConfig = join(root, "config.local.js.env-check-hidden");
 const env = {
   ...process.env,
   WOOGI_APP_URL: "",
@@ -15,11 +18,22 @@ const env = {
   WOOGI_FIREBASE_APP_ID: "1:123456789:web:abc",
   WOOGI_ADMIN_UIDS: "uid-a,uid-b"
 };
-const result = spawnSync(process.execPath, ["tests/production-readiness-check.mjs"], {
-  cwd: root,
-  env,
-  encoding: "utf8"
-});
+let movedLocalConfig = false;
+if (existsSync(localConfig)) {
+  renameSync(localConfig, hiddenLocalConfig);
+  movedLocalConfig = true;
+}
+
+let result;
+try {
+  result = spawnSync(process.execPath, ["tests/production-readiness-check.mjs"], {
+    cwd: root,
+    env,
+    encoding: "utf8"
+  });
+} finally {
+  if (movedLocalConfig) renameSync(hiddenLocalConfig, localConfig);
+}
 const output = `${result.stdout || ""}${result.stderr || ""}`;
 
 if (result.status !== 0) {

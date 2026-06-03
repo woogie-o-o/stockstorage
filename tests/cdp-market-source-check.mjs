@@ -109,7 +109,7 @@ await navigate("#markets", 1440, 900);
 await waitFor(`document.body.textContent.includes("마감 수급 TOP5") && document.body.textContent.includes("finance.naver.com")`);
 await waitFor(`document.body.textContent.includes("펨코 지수") && document.body.textContent.includes("fmkorea.com/stock")`, 18000);
 await waitFor(`document.body.textContent.includes("업종 등락 · 시장 폭") && document.body.textContent.includes("ETF/ETN 제외") && document.querySelectorAll(".source-list .source-item").length >= 4`, 22000);
-await waitFor(`document.body.textContent.includes("KOSPI200 야간선물") && document.body.textContent.includes("KIS OpenAPI") && document.body.textContent.includes("연동 대기")`, 12000);
+await waitFor(`document.body.textContent.includes("KOSPI200 야간선물") && document.body.textContent.includes("KIS OpenAPI") && document.body.textContent.includes("수집 대기")`, 12000);
 const markets = await evaluate(pageSummaryExpression());
 
 await navigate("#fmkorea-index", 1440, 900);
@@ -138,7 +138,7 @@ const indexDetail = await evaluate(pageSummaryExpression());
 
 await navigate("#stock/KS_005930", 1440, 900);
 await waitFor(`document.body.textContent.includes("삼성전자") && document.body.textContent.includes("현재가 출처") && document.body.textContent.includes("Naver Finance") && JSON.parse(document.querySelector("canvas[data-chart='ohlc']")?.dataset.points || "[]").length > 100`, 22000);
-await waitFor(`document.body.textContent.includes("뉴스/공시/근거") && document.body.textContent.includes("Naver Finance Notice")`, 12000);
+await waitFor(`document.body.textContent.includes("뉴스/공시/근거") && (document.body.textContent.includes("OpenDART") || document.body.textContent.includes("Naver Finance Notice"))`, 12000);
 await waitFor(`document.body.textContent.includes("종목토론방") && document.body.textContent.includes("Naver Finance Board")`, 12000);
 const stockDesktop = await evaluate(pageSummaryExpression());
 const stockCandle = await evaluate(`
@@ -231,7 +231,7 @@ if (stockDesktop.chartType !== "ohlc" || stockCandle.points < 100 || stockCandle
 if (!stockDesktop.text.includes("종목토론방") || !stockDesktop.text.includes("Naver Finance Board")) {
   throw new Error(`Stock detail did not show Naver discussion board source: ${JSON.stringify(stockDesktop)}`);
 }
-if (!stockDesktop.text.includes("뉴스/공시/근거") || !stockDesktop.text.includes("Naver Finance Notice")) {
+if (!stockDesktop.text.includes("뉴스/공시/근거") || (!stockDesktop.text.includes("OpenDART") && !stockDesktop.text.includes("Naver Finance Notice"))) {
   throw new Error(`Stock detail did not show Naver disclosure source: ${JSON.stringify(stockDesktop)}`);
 }
 for (const [name, result] of Object.entries(checks)) {
@@ -294,7 +294,7 @@ console.log(JSON.stringify({
     hasMovingAverages: stockCandle.hasMovingAverages,
     lineValues: stockLineValues,
     hasQuoteSource: stockDesktop.text.includes("현재가 출처") && stockDesktop.text.includes("Naver Finance"),
-    hasDisclosure: stockDesktop.text.includes("뉴스/공시/근거") && stockDesktop.text.includes("Naver Finance Notice"),
+    hasDisclosure: stockDesktop.text.includes("뉴스/공시/근거") && (stockDesktop.text.includes("OpenDART") || stockDesktop.text.includes("Naver Finance Notice")),
     hasDiscussion: stockDesktop.text.includes("종목토론방") && stockDesktop.text.includes("Naver Finance Board")
   },
   stockTablet: stockTablet.viewport,

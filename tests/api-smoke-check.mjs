@@ -39,13 +39,14 @@ const marketBrief = await get("/api/market-brief");
 const fmkorea = await get("/api/fmkorea");
 const marketSectors = await get("/api/market-sectors");
 const nightFutures = await get("/api/night-futures");
+const scanner = await get("/api/scanner?market=KS&limit=3&universe=6");
 const samsungFiveYearHistory = await get("/api/history?ticker=005930&market=KS&range=5y&interval=1d");
 
 assert(Number(samsungQuote.price) > 0 && samsungQuote.source === "Naver Finance", "Samsung quote failed", samsungQuote);
 assert(kospiHistory.points?.length > 100 && kospiHistory.source === "Naver Finance", "KOSPI history failed", kospiHistory);
 assert(Number(samsungFundamentals.per) > 0 && Number(samsungFundamentals.pbr) > 0, "Samsung fundamentals failed", samsungFundamentals);
 assert(samsungNews.items?.length >= 1, "Samsung news failed", samsungNews);
-assert(samsungDisclosures.source === "Naver Finance Notice" && samsungDisclosures.items?.length >= 1, "Samsung disclosures failed", samsungDisclosures);
+assert(["OpenDART", "Naver Finance Notice"].includes(samsungDisclosures.source) && samsungDisclosures.items?.length >= 1, "Samsung disclosures failed", samsungDisclosures);
 assert(samsungDiscussions.source === "Naver Finance Board" && samsungDiscussions.items?.length >= 1, "Samsung discussions failed", samsungDiscussions);
 assert(Number(sentiment.score) >= 0 && sentiment.source === "CNN Fear & Greed", "Market sentiment failed", sentiment);
 assert(investorFlow.source === "finance.naver.com", "Investor flow source failed", investorFlow);
@@ -61,6 +62,10 @@ assert(Number(marketSectors.breadth?.kospi?.up) >= 0 && Number(marketSectors.bre
 assert(nightFutures.source === "KIS OpenAPI" && /^A0\d{4}$/.test(nightFutures.symbol), "Night futures schema failed", nightFutures);
 assert(typeof nightFutures.configured === "boolean" && typeof nightFutures.available === "boolean" && Array.isArray(nightFutures.history), "Night futures availability schema failed", nightFutures);
 assert(!JSON.stringify(nightFutures).includes("appSecret") && !JSON.stringify(nightFutures).includes("appKey"), "Night futures response leaks secret field names", nightFutures);
+assert(scanner.source === "Naver Finance Scanner" && scanner.items?.length >= 1, "Scanner results failed", scanner);
+assert(scanner.items.every((item) => Number(item.score) >= 0 && item.tradePlan?.stopPrice < item.tradePlan?.entryPrice), "Scanner trade plan failed", scanner);
+assert(scanner.items.every((item) => Number(item.tradePlan?.riskReward) >= 1.5 && item.tradePlan?.response && item.tradePlan?.positionGuide), "Scanner risk reward failed", scanner);
+assert(scanner.items.every((item) => item.decision?.priority && item.decision?.falseBreakoutRisk && Number(item.factors?.finalBuy) >= 0), "Scanner decision fields failed", scanner);
 assert(samsungFiveYearHistory.source === "Naver Finance" && samsungFiveYearHistory.points?.length > 1000, "Samsung five year history failed", samsungFiveYearHistory);
 if (fmkorea.available) {
   assert(Number(fmkorea.latestCount) > 0 && fmkorea.series?.length >= 1, "FMKorea scrape data failed", fmkorea);
@@ -123,6 +128,12 @@ console.log(JSON.stringify({
     configured: nightFutures.configured,
     available: nightFutures.available,
     mode: nightFutures.mode
+  },
+  scanner: {
+    source: scanner.source,
+    universeCount: scanner.universeCount,
+    scoredCount: scanner.scoredCount,
+    items: scanner.items.map((item) => ({ ticker: item.ticker, score: item.score, pattern: item.pattern }))
   },
   aapl: {
     search: aaplSearch.items[0],

@@ -105,10 +105,36 @@ const featureDetail = await evaluate(`
   })()
 `);
 
+await navigate("#journal");
+await evaluate(`document.querySelector('[data-action="modal"][data-modal="journal"]').click(); true;`);
+await waitFor(`Boolean(document.querySelector('form[data-form="journal"]'))`);
+await evaluate(`
+  (() => {
+    const form = document.querySelector('form[data-form="journal"]');
+    form.querySelector('[name="stockName"]').value = "삼성전자";
+    form.querySelector('[name="ticker"]').value = "005930";
+    form.querySelector('[name="market"]').value = "KS";
+    form.querySelector('[name="action"]').value = "매수";
+    form.querySelector('[name="price"]').value = "73500";
+    form.querySelector('[name="quantity"]').value = "5";
+    form.requestSubmit();
+    return true;
+  })()
+`);
+await waitFor(`!document.querySelector('form[data-form="journal"]') && document.body.textContent.includes("삼성전자")`);
+
 await navigate("#portfolio");
 await waitFor(`document.body.textContent.includes("보유 현황") && document.body.textContent.includes("삼성전자")`);
 await evaluate(`document.querySelector('[data-action="refresh-portfolio"]').click(); true;`);
-await waitFor(`document.body.textContent.includes("LIVE") && document.body.textContent.includes("Naver Finance")`, 18000);
+await waitFor(`document.querySelector("#toast")?.textContent.includes("보유 현황 현재가를 갱신했습니다.")`, 18000);
+const portfolioResult = await evaluate(`
+  (() => ({
+    refreshed: document.querySelector("#toast")?.textContent.includes("보유 현황 현재가를 갱신했습니다.") || false,
+    hasLive: document.body.textContent.includes("LIVE"),
+    rows: document.querySelectorAll("table tbody tr").length,
+    text: document.querySelector("table tbody")?.textContent?.trim() || ""
+  }))()
+`);
 
 await navigate("#compare/KS_005930");
 await waitFor(`Boolean(document.querySelector('form[data-form="compare"]'))`);
@@ -151,9 +177,7 @@ const result = await evaluate(`
   (() => {
     return {
       featureDetail: ${JSON.stringify(featureDetail)},
-      portfolio: {
-        hasLive: document.body.textContent.includes("LIVE") || true
-      },
+      portfolio: ${JSON.stringify(portfolioResult)},
       compare: ${JSON.stringify(compareResult)},
       leaderboard: {
         hasHyundai: document.body.textContent.includes("현대차")
@@ -172,6 +196,9 @@ await fetch(`http://127.0.0.1:${port}/json/close/${page.id}`);
 
 if (!result.featureDetail.hasCaptureInfo || !result.featureDetail.hasActions || result.featureDetail.values <= 50 || result.featureDetail.overflowX) {
   throw new Error(`Feature stock detail failed: ${JSON.stringify(result)}`);
+}
+if (!result.portfolio.refreshed || !result.portfolio.hasLive || result.portfolio.rows < 1) {
+  throw new Error(`Portfolio refresh failed: ${JSON.stringify(result)}`);
 }
 if (!result.leaderboard.hasHyundai) throw new Error(`Leaderboard missing completed pick: ${JSON.stringify(result)}`);
 if (result.compare.cards < 3 || result.compare.series !== 3 || result.compare.nonBlankPixels < 100 || !result.compare.hasPeriods || !result.compare.fiveYearSelected) {
