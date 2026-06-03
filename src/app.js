@@ -2298,7 +2298,7 @@ function renderCapture() {
   const actions = `<button class="btn" data-action="route" data-route="leaderboard">종료 실적</button><button class="btn" data-action="route" data-route="compare">종목 비교</button><button class="btn primary" data-action="route" data-route="ai">AI 분석 목록</button>`;
   return `
     ${renderPageHead("AI Capture", "AI포착과 추천주", "특징주, 급등주, 거래대금/거래량, 추천주와 종료 추천주를 탭과 필터로 봅니다.", actions)}
-    <div class="panel">
+    <div class="panel capture-board">
       <div class="panel-head wrap">
         <div class="tabs">${tabs.map(([id, label]) => `<button class="tab ${state.filters.captureTab === id ? "active" : ""}" data-action="capture-tab" data-tab="${id}">${label}</button>`).join("")}</div>
         <div class="row wrap">
@@ -2308,13 +2308,14 @@ function renderCapture() {
           </select>
         </div>
       </div>
-      <div class="table-wrap">
-        <table class="responsive-table">
-          <thead><tr><th>종목</th><th>구분</th><th>현재가</th><th>등락/수익</th><th>판단</th><th>손익비</th><th>근거</th><th>동작</th></tr></thead>
-          <tbody>
-            ${rows.map(renderCaptureTableRow).join("") || `<tr><td colspan="8"><div class="empty">조건에 맞는 종목이 없습니다.</div></td></tr>`}
-          </tbody>
-        </table>
+      <div class="capture-list-head" aria-hidden="true">
+        <span>순위 · 오늘 ${fmtDate(new Date())} 기준</span>
+        <span>현재가</span>
+        <span>등락/점수</span>
+        <span>판단</span>
+      </div>
+      <div class="capture-ranking-list">
+        ${rows.map((row, index) => renderCaptureRankRow(row, index)).join("") || `<div class="empty">조건에 맞는 종목이 없습니다.</div>`}
       </div>
     </div>
   `;
@@ -2366,6 +2367,40 @@ function renderCaptureTableRow(row) {
       <td data-label="근거">${escapeHtml(item.reason || item.title || "")}</td>
       <td data-label="동작"><div class="capture-actions">${isPick ? `<button class="btn primary" data-action="open-stock" data-stock="${escapeHtml(key)}">상세</button>` : `<button class="btn primary" data-action="route" data-route="feature-stock" data-param="${escapeHtml(item.id || key)}">상세</button><button class="btn" data-action="open-stock" data-stock="${escapeHtml(key)}">종목</button>`}<button class="btn" data-action="generate-ai" data-stock="${escapeHtml(key)}">AI</button></div></td>
     </tr>
+  `;
+}
+
+function renderCaptureRankRow(row, index) {
+  const item = row.item;
+  const isPick = row.type === "pick";
+  const price = isPick ? item.currentPrice || item.closedPrice || item.price : item.currentPrice || item.price;
+  const change = isPick ? (item.status === "completed" ? pickReturn(item, item.closedPrice) : pickReturn(item)) : item.changeRate;
+  const key = stockKey(item);
+  const score = isPick ? Math.abs(pickReturn(item)) : Number(item.score || 0);
+  const pattern = isPick ? (item.status === "completed" ? "종료 추천주" : "추천주") : featurePatternLabel(item.pattern) || featureGroupLabel(item.group) || item.pattern || "AI포착";
+  const action = isPick
+    ? `<button class="btn primary" data-action="open-stock" data-stock="${escapeHtml(key)}">보기</button>`
+    : `<button class="btn primary" data-action="route" data-route="feature-stock" data-param="${escapeHtml(item.id || key)}">상세</button><button class="btn" data-action="open-stock" data-stock="${escapeHtml(key)}">종목</button>`;
+  const decision = isPick ? renderVoteBar(item) : renderFeatureDecisionBadges(item);
+  return `
+    <article class="capture-rank-row">
+      <button class="capture-rank-main" type="button" data-action="${isPick ? "open-stock" : "route"}" ${isPick ? `data-stock="${escapeHtml(key)}"` : `data-route="feature-stock" data-param="${escapeHtml(item.id || key)}"`}>
+        <span class="capture-rank-heart" aria-hidden="true">♥</span>
+        <span class="capture-rank-index">${index + 1}</span>
+        <span class="capture-rank-logo">${escapeHtml((item.name || item.ticker || "?").slice(0, 1))}</span>
+        <span class="capture-rank-name">
+          <strong>${escapeHtml(item.name)}</strong>
+          <small>${escapeHtml(item.ticker)} · ${escapeHtml(item.market)} · ${escapeHtml(pattern)}</small>
+          <em>${dataSourceBadge(item, "SNAPSHOT")} ${escapeHtml(dataSourceLabel(item, "스냅샷"))}</em>
+        </span>
+        <span class="capture-rank-price num">${fmtMoney(price, item.market)}</span>
+        <span class="capture-rank-change ${changeClass(change)}">${fmtPct(change)}</span>
+        <span class="capture-rank-score"><b>${score ? fmtNum(score, 0) : "-"}</b><small>${isPick ? "수익률" : "점수"}</small></span>
+        <span class="capture-rank-reason">${escapeHtml(item.reason || item.title || "")}</span>
+      </button>
+      <div class="capture-rank-decision">${decision}</div>
+      <div class="capture-actions">${action}<button class="btn" data-action="generate-ai" data-stock="${escapeHtml(key)}">AI</button></div>
+    </article>
   `;
 }
 
