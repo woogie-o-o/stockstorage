@@ -4392,8 +4392,8 @@ function renderJournalRow(j) {
 
 function renderAi() {
   const detailId = state.route.param;
-  if (detailId) return renderAnalysisDetail(detailId);
   if (!state.user) return authRequired("AI 분석");
+  if (detailId) return renderAnalysisDetail(detailId);
   const analyses = sortedAnalyses();
   return `
     ${renderPageHead("AI Analysis", "AI 분석 목록/결과", "생성, 캐시 조회, 재분석, 점수, 리스크, 근거 자료와 리포트를 바로 확인합니다.", `<button class="btn" data-action="route" data-route="capture">종목 선택</button>`)}
@@ -4415,7 +4415,7 @@ function renderAi() {
 }
 
 function myAnalyses() {
-  if (!state.user) return state.data.analyses.filter((a) => a.uid === "demo");
+  if (!state.user) return [];
   return state.data.analyses.filter((a) => a.uid === state.user.uid);
 }
 

@@ -86,6 +86,7 @@ for (const text of [app, css, html, readme]) {
     "GoogleSignIn",
     "signInWithGoogle",
     "signInWithKakao",
+    "if (!state.user) return state.data.analyses.filter((a) => a.uid === \"demo\")",
     "signInWithApple",
     "KakaoSdk",
     "AppTrackingTransparency"

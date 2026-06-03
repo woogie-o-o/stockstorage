@@ -111,6 +111,18 @@ await evaluate(`
 `);
 await waitFor(`Boolean(document.querySelector('form[data-form="signup"]'))`);
 
+await navigate("#ai/KS_005930");
+await waitFor(`
+  (() => {
+    const mainText = document.querySelector("main")?.textContent || "";
+    return mainText.includes("AI 분석 기능은 로그인이 필요합니다")
+      && !mainText.includes("목표 대비 여력")
+      && !mainText.includes("HBM 공급 회복");
+  })()
+`);
+await navigate("#profile");
+await waitFor(`Boolean(document.querySelector('form[data-form="signup"]'))`);
+
 await evaluate(`
   (() => {
     const form = document.querySelector('form[data-form="signup"]');
