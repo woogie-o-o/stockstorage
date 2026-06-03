@@ -1923,8 +1923,9 @@ function renderRightPanel(open) {
           <div class="side-list">
             ${indices.map((index) => `
               <button type="button" class="side-row" data-action="market-detail" data-ticker="${escapeHtml(index.ticker)}">
-                <span><strong>${escapeHtml(index.name)}</strong><small>${escapeHtml(index.ticker)}</small></span>
-                <b class="${changeClass(index.changeRate)}">${fmtPct(index.changeRate)}</b>
+                <span class="side-avatar index">${escapeHtml(index.name.slice(0, 1))}</span>
+                <span class="side-main"><strong>${escapeHtml(index.name)}</strong><small>${escapeHtml(index.ticker)}</small></span>
+                <span class="side-value"><b class="${changeClass(index.changeRate)}">${fmtPct(index.changeRate)}</b></span>
               </button>
             `).join("")}
           </div>
@@ -1935,8 +1936,9 @@ function renderRightPanel(open) {
             ${favoriteStocks.length
               ? favoriteStocks.map((stock) => `
                 <button type="button" class="side-row" data-action="open-stock" data-stock="${escapeHtml(stockKey(stock))}">
-                  <span><strong>${escapeHtml(stock.name || stock.ticker)}</strong><small>${escapeHtml(stock.ticker || "")}</small></span>
-                  <b class="${changeClass(stock.changeRate || pickReturn(stock))}">${fmtPct(stock.changeRate || pickReturn(stock))}</b>
+                  <span class="side-avatar">${escapeHtml((stock.name || stock.ticker || "관").slice(0, 1))}</span>
+                  <span class="side-main"><strong>${escapeHtml(stock.name || stock.ticker)}</strong><small>${escapeHtml(stock.ticker || "")}</small></span>
+                  <span class="side-value"><strong>${fmtMoney(stock.currentPrice || stock.price || stock.targetPrice, stock.market)}</strong><b class="${changeClass(stock.changeRate || pickReturn(stock))}">${fmtPct(stock.changeRate || pickReturn(stock))}</b></span>
                 </button>
               `).join("")
               : `<button type="button" class="side-empty" data-action="route" data-route="${state.user ? "favorites" : "profile"}">${state.user ? "관심종목을 추가하세요" : "로그인 후 관심종목 사용"}</button>`}
@@ -1947,8 +1949,9 @@ function renderRightPanel(open) {
           <div class="side-list">
             ${picks.map((pick) => `
               <button type="button" class="side-row" data-action="open-stock" data-stock="${escapeHtml(stockKey(pick))}">
-                <span><strong>${escapeHtml(pick.name)}</strong><small>${escapeHtml(pick.ticker)} · 목표 ${fmtMoney(pick.targetPrice, pick.market)}</small></span>
-                <b class="${changeClass(pickReturn(pick))}">${fmtPct(pickReturn(pick))}</b>
+                <span class="side-avatar ai">AI</span>
+                <span class="side-main"><strong>${escapeHtml(pick.name)}</strong><small>${escapeHtml(pick.ticker)} · 목표 ${fmtMoney(pick.targetPrice, pick.market)}</small></span>
+                <span class="side-value"><strong>${fmtMoney(pick.currentPrice || pick.price || pick.targetPrice, pick.market)}</strong><b class="${changeClass(pickReturn(pick))}">${fmtPct(pickReturn(pick))}</b></span>
               </button>
             `).join("")}
           </div>
