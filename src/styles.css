@@ -1134,6 +1134,57 @@ canvas {
   background: var(--surface);
 }
 
+.list-empty {
+  min-height: 72px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 16px 20px;
+}
+
+.list-empty strong {
+  display: block;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1.35;
+}
+
+.list-empty p {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.list-empty span,
+.list-empty button {
+  min-height: 30px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 10px;
+  background: var(--surface-2);
+  color: var(--muted);
+  display: inline-grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.list-empty button {
+  cursor: pointer;
+}
+
+.list-empty button:hover {
+  background: color-mix(in srgb, var(--accent) 11%, var(--surface-2));
+  color: var(--accent);
+}
+
 .split {
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
@@ -3867,6 +3918,10 @@ th {
   min-height: 44px;
 }
 
+.route-favorites .panel > .list-empty {
+  border-top-color: var(--line);
+}
+
 .table-wrap {
   background: var(--surface);
 }
@@ -4169,14 +4224,16 @@ th {
 }
 
 .auth-gate {
-  max-width: 760px;
+  max-width: 920px;
   margin-top: 18px;
   border-radius: 14px;
   overflow: hidden;
 }
 
 .auth-gate .panel-body {
-  padding: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 10px;
 }
 
 .auth-gate-main {
@@ -4205,7 +4262,6 @@ th {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1px;
   overflow: hidden;
-  margin-top: 8px;
   border-radius: 10px;
   background: var(--line);
 }
@@ -4228,6 +4284,99 @@ th {
 .auth-gate-preview b {
   color: var(--text);
   font-size: 15px;
+  font-weight: 900;
+}
+
+.auth-gate-board {
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.auth-gate-board-head {
+  min-height: 48px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.auth-gate-board-head strong {
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.auth-gate-board-head span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.auth-gate-list {
+  display: grid;
+}
+
+.auth-gate-row {
+  min-height: 62px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  color: inherit;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.auth-gate-row:last-child {
+  border-bottom: 0;
+}
+
+.auth-gate-row:hover {
+  background: var(--surface-2);
+}
+
+.auth-gate-row span:not(.side-avatar) {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.auth-gate-row strong,
+.auth-gate-row small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auth-gate-row strong {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.auth-gate-row small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.auth-gate-row b {
+  min-height: 26px;
+  border-radius: 7px;
+  padding: 0 9px;
+  background: var(--surface-2);
+  color: var(--muted);
+  display: inline-grid;
+  place-items: center;
+  font-size: 12px;
   font-weight: 900;
 }
 

@@ -253,6 +253,8 @@ await waitFor(`
 `);
 
 const memoText = `QA memo ${qaStamp}`;
+await navigate("#stock/KS_005930");
+await waitFor(`Boolean(document.querySelector('form[data-form="memo"]'))`);
 await evaluate(`
   (() => {
     const form = document.querySelector('form[data-form="memo"]');
@@ -364,12 +366,19 @@ await evaluate(`
   })()
 `);
 await waitFor(`document.body.textContent.includes(${JSON.stringify(postTitle)})`);
+const createdPostId = await evaluate(`
+  (() => {
+    const data = JSON.parse(localStorage.getItem("woogi-stock-data-v1"));
+    return data.posts.find((post) => post.title === ${JSON.stringify(postTitle)})?.id;
+  })()
+`);
+await navigate(`#post/${createdPostId}`, 1440, 900);
+await waitFor(`Boolean(document.querySelector('form[data-form="post-comment"]'))`);
 
 const postComment = `QA post comment ${qaStamp}`;
 await evaluate(`
   (() => {
-    const article = [...document.querySelectorAll("article")].find((item) => item.textContent.includes(${JSON.stringify(postTitle)}));
-    const form = article.querySelector('form[data-form="post-comment"]');
+    const form = document.querySelector('form[data-form="post-comment"]');
     form.querySelector('[name="content"]').value = ${JSON.stringify(postComment)};
     form.requestSubmit();
     return true;
@@ -379,13 +388,14 @@ await waitFor(`document.body.textContent.includes(${JSON.stringify(postComment)}
 
 await evaluate(`
   (() => {
-    const article = [...document.querySelectorAll("article")].find((item) => item.textContent.includes(${JSON.stringify(postTitle)}));
-    article.querySelector('[data-action="like-post"]').click();
+    document.querySelector('[data-action="like-post"][data-id="${createdPostId}"]').click();
     return true;
   })()
 `);
 await waitFor(`JSON.parse(localStorage.getItem("woogi-stock-data-v1")).posts.some((item) => item.title === ${JSON.stringify(postTitle)} && item.likes >= 1)`);
 
+await navigate("#community", 1440, 900);
+await waitFor(`document.body.textContent.includes(${JSON.stringify(postTitle)})`);
 await evaluate(`
   (() => {
     const article = [...document.querySelectorAll("article")].find((item) => item.textContent.includes(${JSON.stringify(postTitle)}));

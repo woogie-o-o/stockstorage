@@ -2482,6 +2482,23 @@ function renderFeatureStockDetail() {
             </div>
           </div>
         </section>
+        <nav class="stock-detail-tabs" aria-label="포착 종목 상세 탭">
+          <button class="active" type="button" data-action="scroll-stock-section" data-target=".stock-chart-panel">차트</button>
+          <button type="button" data-action="open-stock" data-stock="${escapeHtml(key)}">종목</button>
+          <button type="button" data-action="generate-ai" data-stock="${escapeHtml(key)}">AI 분석</button>
+          <button type="button" data-action="route" data-route="compare" data-param="${escapeHtml(key)}">비교</button>
+          <button type="button" data-action="route" data-route="community">커뮤니티</button>
+        </nav>
+        <section class="panel stock-chart-panel">
+          <div class="panel-head wrap"><div><h2>포착 차트</h2><p class="subtext">${escapeHtml(historyStamp)}</p></div><div class="row wrap"><div class="tabs compact"><button class="tab ${stockChartMode === "candles" ? "active" : ""}" data-action="stock-chart-mode" data-mode="candles">캔들</button><button class="tab ${stockChartMode === "line" ? "active" : ""}" data-action="stock-chart-mode" data-mode="line">라인</button></div></div></div>
+          <div class="panel-body">
+            ${renderChartFrameControls("stock", stockChartFrame, stockMinuteInterval)}
+            ${stockChartMode === "candles"
+              ? `<div class="stock-chart-legend"><span><i style="--swatch:#ef4444"></i>상승</span><span><i style="--swatch:#3b82f6"></i>하락</span><span><i style="--swatch:#10b981"></i>MA5</span><span><i style="--swatch:#f59e0b"></i>MA20</span><span><i style="--swatch:#8b5cf6"></i>MA60</span></div><div class="stock-chart-shell"><div class="stock-chart-selection" data-chart-selection aria-live="polite"><span data-chart-selection-date>최근</span><b class="num" data-chart-selection-price>-</b><span data-chart-selection-change>-</span></div><div class="chart-box stock-candles"><canvas data-chart="ohlc" data-points="${escapeHtml(JSON.stringify(historyCandles))}" data-market="${escapeHtml(feature.market || "KS")}" data-averages="true" tabindex="0" aria-label="${escapeHtml(feature.name)} ${chartFrameLabel(stockChartFrame, stockMinuteInterval)} 차트"></canvas></div></div>`
+              : `<div class="line-chart-shell"><div class="stock-chart-selection" data-chart-selection aria-live="polite"><span data-chart-selection-date>최근</span><b class="num" data-chart-selection-price>-</b><span data-chart-selection-change>-</span></div><div class="chart-box stock-candles"><canvas data-chart="line" data-values="${historyValues.join(",")}" data-market="${escapeHtml(feature.market || "KS")}" data-color="${feature.changeRate >= 0 ? "up" : "down"}" data-line-interactive="true" tabindex="0" aria-label="${escapeHtml(feature.name)} ${chartFrameLabel(stockChartFrame, stockMinuteInterval)} 라인 차트"></canvas></div></div>`}
+            ${renderChartRangeControls("stock", stockChartFrame, stockChartRange)}
+          </div>
+        </section>
         <section class="panel feature-decision-panel">
           <div class="panel-body">
             <div class="feature-decision-hero">
@@ -2507,23 +2524,6 @@ function renderFeatureStockDetail() {
           </div>
         </section>
         ${renderFourAxisPanel(feature)}
-        <nav class="stock-detail-tabs" aria-label="포착 종목 상세 탭">
-          <button class="active" type="button" data-action="scroll-stock-section" data-target=".stock-chart-panel">차트</button>
-          <button type="button" data-action="open-stock" data-stock="${escapeHtml(key)}">종목</button>
-          <button type="button" data-action="generate-ai" data-stock="${escapeHtml(key)}">AI 분석</button>
-          <button type="button" data-action="route" data-route="compare" data-param="${escapeHtml(key)}">비교</button>
-          <button type="button" data-action="route" data-route="community">커뮤니티</button>
-        </nav>
-        <section class="panel stock-chart-panel">
-          <div class="panel-head wrap"><div><h2>포착 차트</h2><p class="subtext">${escapeHtml(historyStamp)}</p></div><div class="row wrap"><div class="tabs compact"><button class="tab ${stockChartMode === "candles" ? "active" : ""}" data-action="stock-chart-mode" data-mode="candles">캔들</button><button class="tab ${stockChartMode === "line" ? "active" : ""}" data-action="stock-chart-mode" data-mode="line">라인</button></div></div></div>
-          <div class="panel-body">
-            ${renderChartFrameControls("stock", stockChartFrame, stockMinuteInterval)}
-            ${stockChartMode === "candles"
-              ? `<div class="stock-chart-legend"><span><i style="--swatch:#ef4444"></i>상승</span><span><i style="--swatch:#3b82f6"></i>하락</span><span><i style="--swatch:#10b981"></i>MA5</span><span><i style="--swatch:#f59e0b"></i>MA20</span><span><i style="--swatch:#8b5cf6"></i>MA60</span></div><div class="stock-chart-shell"><div class="stock-chart-selection" data-chart-selection aria-live="polite"><span data-chart-selection-date>최근</span><b class="num" data-chart-selection-price>-</b><span data-chart-selection-change>-</span></div><div class="chart-box stock-candles"><canvas data-chart="ohlc" data-points="${escapeHtml(JSON.stringify(historyCandles))}" data-market="${escapeHtml(feature.market || "KS")}" data-averages="true" tabindex="0" aria-label="${escapeHtml(feature.name)} ${chartFrameLabel(stockChartFrame, stockMinuteInterval)} 차트"></canvas></div></div>`
-              : `<div class="line-chart-shell"><div class="stock-chart-selection" data-chart-selection aria-live="polite"><span data-chart-selection-date>최근</span><b class="num" data-chart-selection-price>-</b><span data-chart-selection-change>-</span></div><div class="chart-box stock-candles"><canvas data-chart="line" data-values="${historyValues.join(",")}" data-market="${escapeHtml(feature.market || "KS")}" data-color="${feature.changeRate >= 0 ? "up" : "down"}" data-line-interactive="true" tabindex="0" aria-label="${escapeHtml(feature.name)} ${chartFrameLabel(stockChartFrame, stockMinuteInterval)} 라인 차트"></canvas></div></div>`}
-            ${renderChartRangeControls("stock", stockChartFrame, stockChartRange)}
-          </div>
-        </section>
         <section class="panel feature-info-panel">
           <div class="panel-head"><h2>포착 정보</h2><span class="badge">${escapeHtml(feature.pattern || feature.group || "AI")}</span></div>
           <div class="panel-body stack">
@@ -3925,6 +3925,18 @@ function renderKpiCard(label, value, foot, className = "") {
   return `<div class="card metric"><div class="metric-label">${escapeHtml(label)}</div><div class="metric-value ${className}">${escapeHtml(value)}</div><div class="metric-foot">${escapeHtml(foot)}</div></div>`;
 }
 
+function renderListEmpty(title, detail, action = "", actionAttrs = "") {
+  return `
+    <div class="list-empty">
+      <div>
+        <strong>${escapeHtml(title)}</strong>
+        <p>${escapeHtml(detail)}</p>
+      </div>
+      ${action ? (actionAttrs ? `<button type="button" ${actionAttrs}>${escapeHtml(action)}</button>` : `<span>${escapeHtml(action)}</span>`) : ""}
+    </div>
+  `;
+}
+
 function renderFavorites() {
   if (!state.user) return authRequired("관심종목");
   const doc = getUserDoc();
@@ -3953,13 +3965,13 @@ function renderFavorites() {
               <button class="btn primary">관심종목 추가</button>
             </form>
           </div>
-          <div>${stocks.map((stock) => renderFavoriteStockRow(stock)).join("") || `<div class="panel-body"><div class="empty">등록한 관심종목이 없습니다.</div></div>`}</div>
+          <div>${stocks.map((stock) => renderFavoriteStockRow(stock)).join("") || renderListEmpty("등록한 관심종목이 없습니다.", "일반 관심종목은 추천주 관심과 따로 저장됩니다.", "직접 추가")}</div>
         </section>
       </div>
       <aside class="stack">
         <section class="panel">
           <div class="panel-head"><h2>관심 추천주</h2><span class="badge">${fmtNum(favoritePicks.length, 0)}개</span></div>
-          <div>${favoritePicks.map(renderStockListRow).join("") || `<div class="panel-body"><div class="empty">추천주 상세에서 관심 등록을 누르면 표시됩니다.</div></div>`}</div>
+          <div>${favoritePicks.map(renderStockListRow).join("") || renderListEmpty("관심 추천주가 없습니다", "추천주 상세에서 관심 등록을 누르면 표시됩니다.", "포착 보기", `data-action="route" data-route="capture"`)}</div>
         </section>
         <section class="panel">
           <div class="panel-head"><h2>검색</h2></div>
@@ -4013,12 +4025,14 @@ function renderJournal() {
       </section>
       <section class="panel">
         <div class="panel-head"><h2>기록</h2></div>
-        <div class="table-wrap">
-          <table class="responsive-table">
-            <thead><tr><th>날짜</th><th>종목</th><th>구분</th><th>가격</th><th>수량</th><th>손익</th><th>메모</th><th>동작</th></tr></thead>
-            <tbody>${journals.map(renderJournalRow).join("") || `<tr><td colspan="8"><div class="empty">매매일지를 작성해보세요.</div></td></tr>`}</tbody>
-          </table>
-        </div>
+        ${journals.length ? `
+          <div class="table-wrap">
+            <table class="responsive-table">
+              <thead><tr><th>날짜</th><th>종목</th><th>구분</th><th>가격</th><th>수량</th><th>손익</th><th>메모</th><th>동작</th></tr></thead>
+              <tbody>${journals.map(renderJournalRow).join("")}</tbody>
+            </table>
+          </div>
+        ` : renderListEmpty("매매일지를 작성해보세요.", "매수와 매도를 기록하면 손익 차트와 보유 현황이 자동으로 정리됩니다.", "기록 작성", `data-action="modal" data-modal="journal"`)}
       </section>
     </div>
   `;
@@ -5295,15 +5309,40 @@ function renderMarketAnalysisForm(id = "") {
 }
 
 function authRequired(title) {
-  const previews = {
-    "관심종목": ["일반 관심종목", "관심 추천주", "가격 알림"],
-    "매매일지": ["매수/매도 기록", "손익 차트", "공개 공유"],
-    "매매일지 차트": ["기간별 손익", "종목 필터", "실현손익"],
-    "보유 현황": ["평가금액", "수익률", "종목별 메모"],
-    "AI 분석": ["근거 리포트", "DART 재무", "차트 판단"],
-    "내 글": ["작성글", "댓글", "활동 기록"],
-    "내 댓글": ["커뮤니티 댓글", "일지 댓글", "추천주 댓글"]
-  }[title] || ["개인 기록", "동기화", "내 데이터"];
+  const previewMap = {
+    "관심종목": {
+      kpis: ["일반 관심종목", "관심 추천주", "가격 알림"],
+      rows: [["삼성전자", "005930 · KS", "관심 대기"], ["SK하이닉스", "000660 · KS", "추천주 분리"], ["NAVER", "035420 · KS", "가격 추적"]]
+    },
+    "매매일지": {
+      kpis: ["매수/매도 기록", "손익 차트", "공개 공유"],
+      rows: [["삼성전자 매수", "분할 진입 메모", "기록"], ["현대차 매도", "일부 이익 실현", "손익"], ["일별 차트", "실현손익 흐름", "분석"]]
+    },
+    "매매일지 차트": {
+      kpis: ["기간별 손익", "종목 필터", "실현손익"],
+      rows: [["매수 마커", "일봉 위 진입 구간", "차트"], ["매도 마커", "실현 구간 표시", "손익"], ["메모", "판단 근거 확인", "기록"]]
+    },
+    "보유 현황": {
+      kpis: ["평가금액", "수익률", "종목별 메모"],
+      rows: [["평가손익", "현재가 기반 집계", "대기"], ["평균단가", "매매일지 자동 계산", "집계"], ["종목 메모", "보유 이유 확인", "기록"]]
+    },
+    "AI 분석": {
+      kpis: ["근거 리포트", "DART 재무", "차트 판단"],
+      rows: [["CANSLIM 점수", "성장·수급·차트 축", "분석"], ["DART 요약", "재무 데이터 연결", "근거"], ["차트 포인트", "추세/거래대금 판단", "리포트"]]
+    },
+    "내 글": {
+      kpis: ["작성글", "댓글", "활동 기록"],
+      rows: [["커뮤니티 글", "내 작성글 모아보기", "기록"], ["댓글", "참여 흐름 확인", "활동"], ["좋아요", "반응 추적", "알림"]]
+    },
+    "내 댓글": {
+      kpis: ["커뮤니티 댓글", "일지 댓글", "추천주 댓글"],
+      rows: [["토론 댓글", "종목 의견 확인", "활동"], ["일지 댓글", "공개 매매일지 반응", "기록"], ["추천주 댓글", "포착 종목 의견", "참여"]]
+    }
+  };
+  const preview = previewMap[title] || {
+    kpis: ["개인 기록", "동기화", "내 데이터"],
+    rows: [["내 데이터", "로그인 후 안전하게 표시", "대기"], ["동기화", "Firebase UID 기준 저장", "준비"], ["기능 흐름", "로컬 계정으로도 검증", "확인"]]
+  };
   return `
     ${renderPageHead(title, `${title} 기능은 로그인이 필요합니다`, "이메일 로그인 또는 회원가입 후 사용할 수 있습니다.", `<button class="btn primary" data-action="route" data-route="profile">로그인</button>`)}
     <section class="panel auth-gate">
@@ -5317,7 +5356,19 @@ function authRequired(title) {
           <button class="btn primary" data-action="route" data-route="profile">로그인</button>
         </div>
         <div class="auth-gate-preview">
-          ${previews.map((item) => `<div><span>${escapeHtml(item)}</span><b>대기</b></div>`).join("")}
+          ${preview.kpis.map((item) => `<div><span>${escapeHtml(item)}</span><b>대기</b></div>`).join("")}
+        </div>
+        <div class="auth-gate-board">
+          <div class="auth-gate-board-head"><strong>${escapeHtml(title)} 미리보기</strong><span>로그인 후 실제 데이터로 전환</span></div>
+          <div class="auth-gate-list">
+            ${preview.rows.map(([name, meta, badge]) => `
+              <button type="button" class="auth-gate-row" data-action="route" data-route="profile">
+                <span class="side-avatar">${escapeHtml(name.slice(0, 1))}</span>
+                <span><strong>${escapeHtml(name)}</strong><small>${escapeHtml(meta)}</small></span>
+                <b>${escapeHtml(badge)}</b>
+              </button>
+            `).join("")}
+          </div>
         </div>
       </div>
     </section>
