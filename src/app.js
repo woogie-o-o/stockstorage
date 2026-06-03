@@ -6821,11 +6821,14 @@ function makeLocalAnalysis(stock, uidValue = "demo", date = new Date().toISOStri
   const sector = stock.category || stock.pattern || (stock.market === "US" ? "글로벌 주식" : "국내 주식");
   const fundamentals = extras.fundamentals || {};
   const newsItems = Array.isArray(extras.news) ? extras.news.slice(0, 5) : [];
-  const hasFundamentals = ["per", "pbr", "forwardPer", "marketCap"].some((key) => Number.isFinite(Number(fundamentals[key])) && Number(fundamentals[key]) > 0);
+  const hasFundamentals = ["per", "pbr", "forwardPer", "marketCap", "revenue", "operatingProfit", "netIncome"].some((key) => Number.isFinite(Number(fundamentals[key])) && Number(fundamentals[key]) > 0);
+  const dartFinancialText = Number(fundamentals.revenue || 0) > 0
+    ? ` DART 재무제표 기준 매출 ${fmtMoney(fundamentals.revenue, stock.market)}, 영업이익 ${fmtMoney(fundamentals.operatingProfit || 0, stock.market)}, 순이익 ${fmtMoney(fundamentals.netIncome || 0, stock.market)}도 함께 반영했습니다.`
+    : "";
   const fundamentalsText = hasFundamentals
     ? [
         `현재 가격 ${fmtMoney(price, stock.market)} 기준 목표가 ${fmtMoney(target, stock.market)}까지의 여력은 ${fmtPct(upside)}입니다.`,
-        `PER ${formatRatio(fundamentals.per)}, PBR ${formatRatio(fundamentals.pbr)}, 선행 PER ${formatRatio(fundamentals.forwardPer)}, 시가총액 ${formatMarketCap(fundamentals.marketCap, stock.market)}를 함께 확인했습니다.`,
+        `PER ${formatRatio(fundamentals.per)}, PBR ${formatRatio(fundamentals.pbr)}, 선행 PER ${formatRatio(fundamentals.forwardPer)}, 시가총액 ${formatMarketCap(fundamentals.marketCap, stock.market)}를 함께 확인했습니다.${dartFinancialText}`,
         fundamentals.source ? `출처는 ${fundamentals.source}입니다.` : ""
       ].filter(Boolean).join(" ")
     : `현재 가격 ${fmtMoney(price, stock.market)} 기준 목표가 ${fmtMoney(target, stock.market)}까지의 여력이 핵심입니다. 공개 재무 API가 제한되면 재무지표는 Functions 또는 서버 프록시 연결 후 채워집니다.`;
@@ -6900,7 +6903,11 @@ function makeLocalAnalysis(stock, uidValue = "demo", date = new Date().toISOStri
       per: fundamentals.per,
       pbr: fundamentals.pbr,
       forwardPer: fundamentals.forwardPer,
-      marketCap: fundamentals.marketCap
+      marketCap: fundamentals.marketCap,
+      revenue: fundamentals.revenue,
+      operatingProfit: fundamentals.operatingProfit,
+      netIncome: fundamentals.netIncome,
+      fiscalYear: fundamentals.fiscalYear
     }] : [],
     sourceEpsTimeline: [],
     generatedAt: date,

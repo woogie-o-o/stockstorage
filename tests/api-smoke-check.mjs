@@ -45,6 +45,10 @@ const samsungFiveYearHistory = await get("/api/history?ticker=005930&market=KS&r
 assert(Number(samsungQuote.price) > 0 && samsungQuote.source === "Naver Finance", "Samsung quote failed", samsungQuote);
 assert(kospiHistory.points?.length > 100 && kospiHistory.source === "Naver Finance", "KOSPI history failed", kospiHistory);
 assert(Number(samsungFundamentals.per) > 0 && Number(samsungFundamentals.pbr) > 0, "Samsung fundamentals failed", samsungFundamentals);
+assert(String(samsungFundamentals.source || "").includes("Naver Finance"), "Samsung fundamentals source failed", samsungFundamentals);
+if (String(samsungFundamentals.source || "").includes("OpenDART")) {
+  assert(Number(samsungFundamentals.revenue) > 0 && samsungFundamentals.dartFinancials?.source === "OpenDART", "OpenDART fundamentals merge failed", samsungFundamentals);
+}
 assert(samsungNews.items?.length >= 1, "Samsung news failed", samsungNews);
 assert(["OpenDART", "Naver Finance Notice"].includes(samsungDisclosures.source) && samsungDisclosures.items?.length >= 1, "Samsung disclosures failed", samsungDisclosures);
 assert(samsungDiscussions.source === "Naver Finance Board" && samsungDiscussions.items?.length >= 1, "Samsung discussions failed", samsungDiscussions);
@@ -77,6 +81,8 @@ console.log(JSON.stringify({
   samsung: {
     price: samsungQuote.price,
     source: samsungQuote.source,
+    fundamentalsSource: samsungFundamentals.source,
+    hasDartFinancials: Boolean(samsungFundamentals.dartFinancials),
     per: samsungFundamentals.per,
     pbr: samsungFundamentals.pbr,
     news: samsungNews.items.length,

@@ -1215,6 +1215,120 @@ def naver_domestic_fundamentals(ticker: str):
     return result if any(value is not None for key, value in result.items() if key != "source") else None
 
 
+def parse_dart_amount(value):
+    text = str(value or "").strip().replace(",", "")
+    if not text or text in {"-", "N/A"}:
+        return None
+    negative = text.startswith("(") and text.endswith(")")
+    text = text.strip("()")
+    match = re.search(r"-?\d+(?:\.\d+)?", text)
+    if not match:
+        return None
+    amount = float(match.group(0))
+    return -amount if negative else amount
+
+
+def normalize_dart_account_name(value: str):
+    return re.sub(r"[\s()（）ㆍ·]", "", str(value or ""))
+
+
+def pick_dart_account_amount(lines: list[dict], names: list[str]):
+    normalized_names = [normalize_dart_account_name(name) for name in names]
+    candidates = []
+    for line in lines:
+        account_name = normalize_dart_account_name(line.get("account_nm") or line.get("accountName"))
+        if not account_name:
+            continue
+        if not any(name and name in account_name for name in normalized_names):
+            continue
+        amount = parse_dart_amount(line.get("thstrm_amount") or line.get("amount"))
+        if amount is None:
+            continue
+        score = 0
+        if str(line.get("fs_div") or "").upper() == "CFS":
+            score += 10
+        if str(line.get("sj_div") or "").upper() == "IS":
+            score += 5
+        if account_name in normalized_names:
+            score += 3
+        candidates.append((score, account_name, amount, line))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda item: (-item[0], len(item[1])))
+    return candidates[0][2]
+
+
+def parse_dart_financial_statement(payload) -> dict | None:
+    lines = payload.get("list") if isinstance(payload, dict) else payload
+    if not isinstance(lines, list):
+        return None
+    income_lines = [
+        line for line in lines
+        if isinstance(line, dict) and str(line.get("sj_div") or "").upper() in {"IS", ""}
+    ]
+    revenue = pick_dart_account_amount(income_lines, ["매출액", "수익"])
+    operating_profit = pick_dart_account_amount(income_lines, ["영업이익"])
+    net_income = pick_dart_account_amount(income_lines, ["당기순이익"])
+    if revenue is None and operating_profit is None and net_income is None:
+        return None
+    first = next((line for line in income_lines if isinstance(line, dict)), {})
+    return {
+        "revenue": revenue,
+        "operatingProfit": operating_profit,
+        "netIncome": net_income,
+        "fiscalYear": str(first.get("bsns_year") or ""),
+        "reportCode": str(first.get("reprt_code") or ""),
+        "currency": "KRW",
+        "source": "OpenDART",
+    }
+
+
+def dart_financials(ticker: str, market: str):
+    if market not in {"KS", "KQ"} or not IS_NUMERIC_CODE.match(ticker):
+        return None
+    key = dart_api_key()
+    if not key:
+        return None
+    corp_code = load_dart_corp_codes().get(ticker.upper())
+    if not corp_code:
+        return None
+    current_year = kst_now().year
+    for year in (current_year - 1, current_year - 2):
+        url = "https://opendart.fss.or.kr/api/fnlttSinglAcnt.json?" + urllib.parse.urlencode({
+            "crtfc_key": key,
+            "corp_code": corp_code,
+            "bsns_year": str(year),
+            "reprt_code": "11011",
+        })
+        try:
+            data = fetch_json(url, timeout=12)
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, ValueError, OSError):
+            continue
+        if str(data.get("status") or "") not in {"000", ""}:
+            continue
+        snapshot = parse_dart_financial_statement(data)
+        if snapshot:
+            return snapshot
+    return None
+
+
+def merge_fundamental_snapshots(base: dict | None, dart_snapshot: dict | None):
+    if not dart_snapshot:
+        return base
+    result = dict(base or {})
+    for key in ("revenue", "operatingProfit", "netIncome", "fiscalYear", "reportCode", "currency"):
+        value = dart_snapshot.get(key)
+        if value not in (None, ""):
+            result[key] = value
+    result["dartFinancials"] = dart_snapshot
+    sources = []
+    for source in (result.get("source"), dart_snapshot.get("source")):
+        if source and source not in sources:
+            sources.append(source)
+    result["source"] = " · ".join(sources) if sources else "OpenDART"
+    return result if result else None
+
+
 def yahoo_fundamentals(symbol: str):
     encoded = urllib.parse.quote(symbol, safe="")
     url = (
@@ -1242,7 +1356,8 @@ def yahoo_fundamentals(symbol: str):
 
 def fetch_fundamentals(ticker: str, market: str):
     if market in {"KS", "KQ"}:
-        return naver_domestic_fundamentals(ticker)
+        base = naver_domestic_fundamentals(ticker)
+        return merge_fundamental_snapshots(base, dart_financials(ticker, market))
     return yahoo_fundamentals(market_symbol(ticker, market))
 
 

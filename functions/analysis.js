@@ -49,6 +49,10 @@ function normalizeFundamentals(fundamentals = {}) {
     pbr: fundamentals.pbr,
     forwardPer: fundamentals.forwardPer,
     marketCap: fundamentals.marketCap,
+    revenue: fundamentals.revenue || fundamentals.dartFinancials?.revenue,
+    operatingProfit: fundamentals.operatingProfit || fundamentals.dartFinancials?.operatingProfit,
+    netIncome: fundamentals.netIncome || fundamentals.dartFinancials?.netIncome,
+    fiscalYear: fundamentals.fiscalYear || fundamentals.dartFinancials?.fiscalYear,
     source: fundamentals.source || ""
   };
 }
@@ -74,7 +78,7 @@ function buildDeterministicAnalysis(data = {}, generatedAt = new Date().toISOStr
   const score = Math.round(clamp(58 + upside * 0.7 + changeRate * 1.8, 28, 92));
   const label = score >= 75 ? "우호" : score >= 55 ? "중립" : "주의";
   const fundamentals = normalizeFundamentals(data.fundamentals || {});
-  const hasFinancials = ["per", "pbr", "forwardPer", "marketCap"].some((key) => numberValue(fundamentals[key]) > 0);
+  const hasFinancials = ["per", "pbr", "forwardPer", "marketCap", "revenue", "operatingProfit", "netIncome"].some((key) => numberValue(fundamentals[key]) > 0);
   const news = normalizeNews(data.news);
   const disclosures = normalizeDisclosures(data.disclosures);
   const sourceFinancials = hasFinancials ? [{
@@ -84,8 +88,15 @@ function buildDeterministicAnalysis(data = {}, generatedAt = new Date().toISOStr
     per: fundamentals.per,
     pbr: fundamentals.pbr,
     forwardPer: fundamentals.forwardPer,
-    marketCap: fundamentals.marketCap
+    marketCap: fundamentals.marketCap,
+    revenue: fundamentals.revenue,
+    operatingProfit: fundamentals.operatingProfit,
+    netIncome: fundamentals.netIncome,
+    fiscalYear: fundamentals.fiscalYear
   }] : [];
+  const dartText = numberValue(fundamentals.revenue) > 0
+    ? ` DART 매출 ${money(fundamentals.revenue, stock.market)}, 영업이익 ${money(fundamentals.operatingProfit, stock.market)}, 순이익 ${money(fundamentals.netIncome, stock.market)}도 함께 반영했습니다.`
+    : "";
   return {
     analysisId: `${stock.market}_${stock.ticker}`,
     ticker: stock.ticker,
@@ -98,7 +109,7 @@ function buildDeterministicAnalysis(data = {}, generatedAt = new Date().toISOStr
     summary: `${stock.name}은 현재가 ${money(currentPrice, stock.market)} 기준 목표 대비 여력 ${pct(upside)}와 최근 등락률 ${pct(changeRate)}를 함께 확인해야 합니다.`,
     todayReason: news[0]?.title || "가격, 거래대금, 재무 근거를 함께 확인하는 구간입니다.",
     fundamentals: hasFinancials
-      ? `PER ${ratio(fundamentals.per)}, PBR ${ratio(fundamentals.pbr)}, 선행 PER ${ratio(fundamentals.forwardPer)}를 확인했습니다.`
+      ? `PER ${ratio(fundamentals.per)}, PBR ${ratio(fundamentals.pbr)}, 선행 PER ${ratio(fundamentals.forwardPer)}를 확인했습니다.${dartText}`
       : "재무지표 입력이 제한되어 가격과 뉴스 근거를 우선 반영했습니다.",
     technical: changeRate >= 0 ? "단기 가격 흐름은 우호적이나 거래대금 유지가 필요합니다." : "단기 조정 흐름이 있어 지지선 확인이 필요합니다.",
     news: news.length || disclosures.length

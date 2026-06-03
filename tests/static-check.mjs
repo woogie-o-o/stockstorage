@@ -46,6 +46,7 @@ const files = [
   "tests/server-log-message-check.py",
   "tests/server-browser-config-check.py",
   "tests/server-security-headers-check.py",
+  "tests/dart-financials-check.py",
   "tests/scanner-engine-check.py",
   "tests/server-http-contract-check.mjs",
   "tests/night-futures-normalize-check.mjs",

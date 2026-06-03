@@ -23,6 +23,11 @@ The function always returns the analysis schema expected by the client. If the
 deterministic analysis from the stock, price, fundamentals, candle, and news
 payload sent by the browser.
 
+When `DART_API_KEY` is available to the local/server API, domestic fundamentals
+can include OpenDART annual revenue, operating profit, and net income. The
+callable preserves those fields in `sourceFinancials` even when OpenAI is not
+configured.
+
 The OpenAI call uses the Responses API over `fetch`, so no OpenAI SDK package is
 required in the Functions bundle.
 

@@ -12,7 +12,17 @@ const {
 const input = {
   stock: { ticker: "005930", name: "삼성전자", market: "KS" },
   price: { currentPrice: 347000, targetPrice: 355000, changeRate: 9.46 },
-  fundamentals: { per: 28.17, pbr: 4.85, forwardPer: 8.09, marketCap: 2037400000000000, source: "Naver Finance" },
+  fundamentals: {
+    per: 28.17,
+    pbr: 4.85,
+    forwardPer: 8.09,
+    marketCap: 2037400000000000,
+    revenue: 258935494000000,
+    operatingProfit: 32726066000000,
+    netIncome: 34451367000000,
+    fiscalYear: "2025",
+    source: "Naver Finance · OpenDART"
+  },
   news: [{ title: "삼성전자 테스트 뉴스", publisher: "QA News", url: "https://example.com/news" }],
   disclosures: [{ title: "삼성전자 테스트 공시", date: "2026.06.01", submitter: "KOSCOM", url: "https://example.com/disclosure" }]
 };
@@ -20,6 +30,7 @@ const input = {
 const analysis = buildDeterministicAnalysis(input, "2026-06-01T00:00:00.000Z");
 if (analysis.analysisId !== "KS_005930") throw new Error(`bad analysisId: ${analysis.analysisId}`);
 if (!analysis.sourceNews.length || !analysis.sourceDisclosures.length || !analysis.sourceFinancials.length) throw new Error("sources missing");
+if (analysis.sourceFinancials[0].revenue !== 258935494000000 || !analysis.fundamentals.includes("DART 매출")) throw new Error("DART financial source missing");
 if (!analysis.scenarios?.bull || !analysis.risksDetailed?.length) throw new Error("schema sections missing");
 
 const prompt = buildOpenAIPrompt(input, analysis);
