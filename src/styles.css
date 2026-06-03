@@ -2216,6 +2216,7 @@ body {
   align-self: start;
   position: sticky;
   top: 62px;
+  padding-top: 150px;
 }
 
 .stock-quote-stack {
@@ -2224,6 +2225,7 @@ body {
   align-self: start;
   position: sticky;
   top: 62px;
+  padding-top: 150px;
 }
 
 .stock-quote-panel,
@@ -2236,11 +2238,11 @@ body {
 }
 
 .stock-quote-panel {
-  min-height: 597px;
+  min-height: 418px;
 }
 
 .stock-work-panel {
-  min-height: 597px;
+  min-height: 850px;
 }
 
 .stock-work-tabs {
@@ -4600,7 +4602,7 @@ button[data-action="refresh-portfolio"] {
 
   .route-stock .stock-chart-panel .chart-box.stock-candles,
   .route-feature-stock .stock-chart-panel .chart-box.stock-candles {
-    height: 356px;
+    height: 300px;
   }
 
   .route-stock .stock-chart-panel .panel-body,
@@ -4629,9 +4631,13 @@ button[data-action="refresh-portfolio"] {
     background: var(--surface);
   }
 
-  .stock-quote-panel,
+  .stock-quote-panel {
+    min-height: 418px;
+    padding: 8px;
+  }
+
   .stock-work-panel {
-    min-height: 642px;
+    min-height: 850px;
     padding: 8px;
   }
 
@@ -4718,11 +4724,12 @@ button[data-action="refresh-portfolio"] {
   }
 
   .stock-chart-selection {
-    top: 2px;
-    left: 16px;
+    top: 6px;
+    left: 18px;
     gap: 8px;
-    padding-left: 0;
-    background: transparent;
+    padding: 5px 8px;
+    background: color-mix(in srgb, var(--surface) 88%, transparent);
+    box-shadow: 0 1px 4px rgba(0, 29, 58, 0.05);
   }
 
   .stock-chart-selection [data-chart-selection-date] {

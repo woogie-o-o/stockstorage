@@ -2874,6 +2874,10 @@ function renderStockDetail() {
             ${renderKpi("PBR", formatRatio(fundamentals.pbr))}
             ${renderKpi("선행 PER", formatRatio(fundamentals.forwardPer))}
             ${renderKpi("시가총액", formatMarketCap(fundamentals.marketCap, stock.market))}
+            ${renderKpi("매출", formatMarketCap(fundamentals.revenue, stock.market))}
+            ${renderKpi("영업이익", formatMarketCap(fundamentals.operatingProfit, stock.market))}
+            ${renderKpi("순이익", formatMarketCap(fundamentals.netIncome, stock.market))}
+            ${renderKpi("재무 출처", fundamentals.source?.includes("OpenDART") ? "DART" : (fundamentals.source || "-"))}
           </div>
         </section>
         <section class="panel">
