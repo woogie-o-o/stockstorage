@@ -192,6 +192,7 @@ for (const flow of [
   "최근 근거 뉴스",
   "sourceFinancials",
   "favoriteStocks",
+  "pruneStockKeyFromFavoritePicks",
   "memos",
   "api.finance.naver.com/siseJson.naver",
   "polling.finance.naver.com/api/realtime/domestic/index",

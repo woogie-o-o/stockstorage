@@ -5298,6 +5298,12 @@ function favoritePickCount() {
   return (doc.favorites || []).filter((id) => state.data.stockPicks.some((pick) => pick.id === id)).length;
 }
 
+function pruneStockKeyFromFavoritePicks(doc, key) {
+  const before = Array.isArray(doc.favorites) ? doc.favorites : [];
+  doc.favorites = before.filter((id) => id !== key);
+  return doc.favorites.length !== before.length;
+}
+
 function captureCount() {
   const activePicks = state.data.stockPicks.filter((pick) => pick.status === "active").length;
   return activePicks + state.data.marketFeatures.length;
@@ -5590,8 +5596,10 @@ async function addFavoriteStock(data) {
   const key = stockKey(stock);
   doc.favoriteStocks[key] = stock;
   doc.favoriteStockIds = [key, ...(doc.favoriteStockIds || []).filter((id) => id !== key)];
+  const prunedFavorites = pruneStockKeyFromFavoritePicks(doc, key);
   saveData();
   await syncFavoriteStockFirestore(key, stock, false);
+  if (prunedFavorites) await syncFavoritePickFirestore(doc.favorites);
   toast("관심종목에 추가했습니다.");
   render();
 }
@@ -5627,6 +5635,7 @@ async function toggleFavoriteStock(key) {
   const stock = getStockByKey(key);
   if (!stock) return;
   const doc = getUserDoc();
+  const prunedFavorites = pruneStockKeyFromFavoritePicks(doc, key);
   if (doc.favoriteStocks[key]) {
     delete doc.favoriteStocks[key];
     doc.favoriteStockIds = (doc.favoriteStockIds || []).filter((id) => id !== key);
@@ -5644,6 +5653,7 @@ async function toggleFavoriteStock(key) {
     toast("관심종목에 등록했습니다.");
   }
   saveData();
+  if (prunedFavorites) await syncFavoritePickFirestore(doc.favorites);
   render();
 }
 

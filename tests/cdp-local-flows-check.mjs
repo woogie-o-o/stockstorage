@@ -203,7 +203,11 @@ await waitFor(`
     const session = JSON.parse(localStorage.getItem("woogi-stock-session-v1"));
     const data = JSON.parse(localStorage.getItem("woogi-stock-data-v1"));
     const doc = data.userDocs[session.uid];
-    return Boolean(doc.favoriteStocks.KS_005930) && !doc.favorites.includes("KS_005930");
+    const mainText = (document.querySelector("main")?.textContent || "").replace(/\\s+/g, " ");
+    return Boolean(doc.favoriteStocks.KS_005930)
+      && !doc.favorites.includes("KS_005930")
+      && mainText.includes("일반 관심종목1개")
+      && mainText.includes("관심 추천주0개");
   })()
 `);
 await navigate("#stock/KS_005930");
@@ -220,6 +224,19 @@ await waitFor(`
     const data = JSON.parse(localStorage.getItem("woogi-stock-data-v1"));
     const doc = data.userDocs[session.uid];
     return Boolean(doc.favoriteStocks.KS_005930) && doc.favorites.includes("pick_samsung");
+  })()
+`);
+await navigate("#favorites");
+await waitFor(`
+  (() => {
+    const mainText = (document.querySelector("main")?.textContent || "").replace(/\\s+/g, " ");
+    const session = JSON.parse(localStorage.getItem("woogi-stock-session-v1"));
+    const data = JSON.parse(localStorage.getItem("woogi-stock-data-v1"));
+    const doc = data.userDocs[session.uid];
+    return Object.keys(doc.favoriteStocks || {}).length === 1
+      && doc.favorites.includes("pick_samsung")
+      && mainText.includes("일반 관심종목1개")
+      && mainText.includes("관심 추천주1개");
   })()
 `);
 
