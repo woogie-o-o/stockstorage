@@ -5568,7 +5568,7 @@ function scrollStockSection(button) {
     toast("해당 섹션을 준비 중입니다.");
     return;
   }
-  section.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
+  section.scrollIntoView({ behavior: "auto", block: "start", inline: "nearest" });
   section.classList.add("section-focus");
   window.setTimeout(() => section.classList.remove("section-focus"), 900);
 }
