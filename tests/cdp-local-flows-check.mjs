@@ -1,12 +1,13 @@
 const port = process.env.CDP_PORT || "9223";
 const appUrl = process.env.WOOGI_APP_URL || "http://127.0.0.1:8019";
+const flowUrl = `${appUrl.replace(/\/$/, "")}/?firebase=off`;
 const qaStamp = Date.now().toString(36);
 const email = `qa-${qaStamp}@woogi.local`;
 const password = "qa-password-2026";
 const nickname = `QA${qaStamp}`;
 
 const page = await fetch(
-  `http://127.0.0.1:${port}/json/new?${encodeURIComponent(`${appUrl}/#profile`)}`,
+  `http://127.0.0.1:${port}/json/new?${encodeURIComponent(`${flowUrl}#profile`)}`,
   { method: "PUT" }
 ).then((res) => res.json());
 if (!page) throw new Error("No Chrome page target found for CDP local flow check");
@@ -67,7 +68,7 @@ async function navigate(hash, width = 1280, height = 900) {
     deviceScaleFactor: 1,
     mobile: width < 760
   });
-  await send("Page.navigate", { url: `${appUrl}/${hash}` });
+  await send("Page.navigate", { url: `${flowUrl}${hash}` });
   await waitFor(`Boolean(document.querySelector("main"))`);
 }
 
@@ -183,7 +184,8 @@ await waitFor(`
     const mainText = document.querySelector("main")?.textContent || "";
     const session = JSON.parse(localStorage.getItem("woogi-stock-session-v1"));
     const data = JSON.parse(localStorage.getItem("woogi-stock-data-v1"));
-    const doc = data.userDocs[session.uid];
+    const doc = data.userDocs?.[session?.uid];
+    if (!doc) return false;
     return mainText.includes("등록한 관심종목이 없습니다.")
       && mainText.includes("추천주 상세에서 관심 등록을 누르면 표시됩니다.")
       && Object.keys(doc.favoriteStocks || {}).length === 0
@@ -203,7 +205,8 @@ await waitFor(`
   (() => {
     const session = JSON.parse(localStorage.getItem("woogi-stock-session-v1"));
     const data = JSON.parse(localStorage.getItem("woogi-stock-data-v1"));
-    const doc = data.userDocs[session.uid];
+    const doc = data.userDocs?.[session?.uid];
+    if (!doc) return false;
     return Boolean(doc.favoriteStocks.KS_005930) && !doc.favorites.includes("pick_samsung");
   })()
 `);
@@ -211,7 +214,7 @@ await evaluate(`
   (() => {
     const session = JSON.parse(localStorage.getItem("woogi-stock-session-v1"));
     const data = JSON.parse(localStorage.getItem("woogi-stock-data-v1"));
-    const doc = data.userDocs[session.uid];
+    const doc = data.userDocs?.[session?.uid] || (data.userDocs[session.uid] = { favorites: [], favoriteStocks: {}, favoriteStockIds: [] });
     doc.favorites = ["KS_005930", ...(doc.favorites || [])];
     localStorage.setItem("woogi-stock-data-v1", JSON.stringify(data));
     return true;
@@ -224,7 +227,8 @@ await waitFor(`
   (() => {
     const session = JSON.parse(localStorage.getItem("woogi-stock-session-v1"));
     const data = JSON.parse(localStorage.getItem("woogi-stock-data-v1"));
-    const doc = data.userDocs[session.uid];
+    const doc = data.userDocs?.[session?.uid];
+    if (!doc) return false;
     const mainText = (document.querySelector("main")?.textContent || "").replace(/\\s+/g, " ");
     return Boolean(doc.favoriteStocks.KS_005930)
       && !doc.favorites.includes("KS_005930")
@@ -244,7 +248,8 @@ await waitFor(`
   (() => {
     const session = JSON.parse(localStorage.getItem("woogi-stock-session-v1"));
     const data = JSON.parse(localStorage.getItem("woogi-stock-data-v1"));
-    const doc = data.userDocs[session.uid];
+    const doc = data.userDocs?.[session?.uid];
+    if (!doc) return false;
     return Boolean(doc.favoriteStocks.KS_005930) && doc.favorites.includes("pick_samsung");
   })()
 `);
@@ -254,7 +259,8 @@ await waitFor(`
     const mainText = (document.querySelector("main")?.textContent || "").replace(/\\s+/g, " ");
     const session = JSON.parse(localStorage.getItem("woogi-stock-session-v1"));
     const data = JSON.parse(localStorage.getItem("woogi-stock-data-v1"));
-    const doc = data.userDocs[session.uid];
+    const doc = data.userDocs?.[session?.uid];
+    if (!doc) return false;
     return Object.keys(doc.favoriteStocks || {}).length === 1
       && doc.favorites.includes("pick_samsung")
       && mainText.includes("일반 관심종목1개")

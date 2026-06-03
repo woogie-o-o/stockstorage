@@ -1009,6 +1009,11 @@ async function hashPassword(value) {
 }
 
 async function initFirebase() {
+  const params = new URLSearchParams(window.location.search || "");
+  if (params.get("firebase") === "off") {
+    state.firebase.status = "Firebase 비활성화 · 로컬 저장소";
+    return;
+  }
   const cfg = window.WOOGI_FIREBASE_CONFIG || readJson("WOOGI_FIREBASE_CONFIG");
   if (!cfg || !cfg.apiKey || !cfg.projectId || !cfg.appId) {
     state.firebase.status = "Firebase 미연결 · 로컬 저장소";
@@ -2786,11 +2791,11 @@ function renderStockDetail() {
   const quoteValueLabel = stock.tradingValue ? "거래대금" : fundamentals.marketCap ? "시가총액" : "거래대금";
   const quoteValue = stock.tradingValue ? formatTradingValue(stock.tradingValue) : fundamentals.marketCap ? formatMarketCap(fundamentals.marketCap, stock.market) : "-";
   const stockHeaderActions = `
-    <button class="btn stock-icon-action" data-action="route" data-route="capture" aria-label="목록"><span>‹</span><b>목록</b></button>
-    <button class="btn stock-icon-action" data-action="route" data-route="compare" data-param="${escapeHtml(key)}" aria-label="비교"><span>↔</span><b>비교</b></button>
-    ${stockPick ? `<button class="btn stock-icon-action ${favoritePick ? "danger" : ""}" data-action="toggle-favorite-pick" data-pick="${escapeHtml(stock.id)}" aria-label="${favoritePick ? "관심추천주 해제" : "관심추천주"}"><span>✦</span><b>추천</b></button>` : ""}
-    <button class="btn stock-icon-action ${favoriteStock ? "danger" : ""}" data-action="toggle-favorite-stock" data-stock="${escapeHtml(key)}" aria-label="${favoriteStock ? "관심 해제" : "관심 등록"}"><span>${favoriteStock ? "♥" : "♡"}</span><b>관심</b></button>
-    <button class="btn stock-icon-action accent" data-action="generate-ai" data-stock="${escapeHtml(key)}" aria-label="${analysis ? "AI 재분석" : "AI 분석"}"><span>✦</span><b>AI</b></button>
+    <button class="btn stock-icon-action" data-action="route" data-route="capture" aria-label="목록"><span><svg aria-hidden="true"><use href="/assets/rail-icons.svg#chevrons"></use></svg></span><b>목록</b></button>
+    <button class="btn stock-icon-action" data-action="route" data-route="compare" data-param="${escapeHtml(key)}" aria-label="비교"><span><svg aria-hidden="true"><use href="/assets/rail-icons.svg#compare"></use></svg></span><b>비교</b></button>
+    ${stockPick ? `<button class="btn stock-icon-action ${favoritePick ? "danger" : ""}" data-action="toggle-favorite-pick" data-pick="${escapeHtml(stock.id)}" aria-label="${favoritePick ? "관심추천주 해제" : "관심추천주"}"><span><svg aria-hidden="true"><use href="/assets/rail-icons.svg#sparkles"></use></svg></span><b>추천</b></button>` : ""}
+    <button class="btn stock-icon-action ${favoriteStock ? "danger" : ""}" data-action="toggle-favorite-stock" data-stock="${escapeHtml(key)}" aria-label="${favoriteStock ? "관심 해제" : "관심 등록"}"><span><svg aria-hidden="true"><use href="/assets/rail-icons.svg#heart"></use></svg></span><b>관심</b></button>
+    <button class="btn stock-icon-action accent" data-action="generate-ai" data-stock="${escapeHtml(key)}" aria-label="${analysis ? "AI 재분석" : "AI 분석"}"><span><svg aria-hidden="true"><use href="/assets/rail-icons.svg#sparkles"></use></svg></span><b>AI</b></button>
   `;
   return `
     ${mobileStockHeader}
