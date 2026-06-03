@@ -1339,7 +1339,8 @@ function normalizeNotice(item) {
     title: item.title || "",
     body: item.body || "",
     isPinned: Boolean(item.isPinned),
-    createdAt: item.createdAt || new Date().toISOString()
+    createdAt: item.createdAt || new Date().toISOString(),
+    updatedAt: item.updatedAt || null
   };
 }
 
@@ -2251,8 +2252,11 @@ function renderNoticeDetail() {
   if (!notice) {
     return renderPageHead("Notice", "공지사항을 찾을 수 없습니다", "공지 목록에서 다시 선택해주세요.", `<button class="btn" data-action="route" data-route="notices">공지 목록</button>`);
   }
+  const adminActions = isAdmin()
+    ? `<button class="btn" data-action="modal" data-modal="notice" data-id="${escapeHtml(notice.id)}">수정</button><button class="btn danger" data-action="delete-notice" data-id="${escapeHtml(notice.id)}">삭제</button>`
+    : "";
   return `
-    ${renderPageHead("Notice", notice.title, `${notice.isPinned ? "고정 공지 · " : ""}${fmtDateTime(notice.createdAt)}`, `<button class="btn" data-action="route" data-route="notices">목록</button>${isAdmin() ? `<button class="btn primary" data-action="modal" data-modal="notice">공지 작성</button>` : ""}`)}
+    ${renderPageHead("Notice", notice.title, `${notice.isPinned ? "고정 공지 · " : ""}${fmtDateTime(notice.createdAt)}`, `<button class="btn" data-action="route" data-route="notices">목록</button>${adminActions}`)}
     <section class="panel notice-detail">
       <div class="panel-body">
         ${notice.isPinned ? `<span class="badge warn">고정</span>` : ""}
@@ -5249,13 +5253,15 @@ function renderPickForm() {
   `;
 }
 
-function renderNoticeForm() {
+function renderNoticeForm(id = "") {
+  const notice = id ? findNotice(id) : null;
   return `
     <form class="form" data-form="notice">
-      <input class="input" name="title" placeholder="제목" required />
-      <textarea class="textarea" name="body" placeholder="내용" required></textarea>
-      <label class="row"><input type="checkbox" name="isPinned" /> 고정</label>
-      <button class="btn primary">저장</button>
+      <input type="hidden" name="id" value="${escapeHtml(id || "")}" />
+      <input class="input" name="title" placeholder="제목" value="${escapeHtml(notice?.title || "")}" required />
+      <textarea class="textarea" name="body" placeholder="내용" required>${escapeHtml(notice?.body || "")}</textarea>
+      <label class="row"><input type="checkbox" name="isPinned" ${notice?.isPinned ? "checked" : ""} /> 고정</label>
+      <button class="btn primary">${notice ? "수정" : "저장"}</button>
     </form>
   `;
 }
@@ -5310,7 +5316,7 @@ function renderModal() {
   let body = "";
   if (modal.type === "journal") body = renderJournalModal(modal.id);
   if (modal.type === "post") body = renderPostModal(modal.id);
-  if (modal.type === "notice") body = renderNoticeForm();
+  if (modal.type === "notice") body = renderNoticeForm(modal.id);
   if (modal.type === "market-analysis") body = renderMarketAnalysisForm(modal.id);
   return `
     <div class="modal-backdrop" data-action="close-modal">
@@ -5324,6 +5330,7 @@ function renderModal() {
 
 function modalTitle(type, id = "") {
   if (type === "post" && id) return "글 수정";
+  if (type === "notice" && id) return "공지 수정";
   return { journal: "매매일지", post: "글쓰기", notice: "공지", "market-analysis": "시황 분석" }[type] || "입력";
 }
 
@@ -5410,6 +5417,7 @@ async function onClick(event) {
   if (action === "like-journal") await likeJournal(actionEl.dataset.id);
   if (action === "report") await reportContent(actionEl.dataset.target);
   if (action === "delete-report") await deleteReport(actionEl.dataset.id);
+  if (action === "delete-notice") await deleteNotice(actionEl.dataset.id);
   if (action === "refresh-prices") await refreshPrices();
   if (action === "refresh-brief") await refreshAiBrief();
   if (action === "refresh-fmkorea") await refreshFmkoreaMarketData();
@@ -6572,26 +6580,47 @@ async function deleteReport(id) {
 
 async function saveNotice(data) {
   if (!isAdmin()) throw new Error("관리자 권한이 필요합니다.");
+  const id = String(data.id || "").trim();
+  const existing = id ? findNotice(id) : null;
+  if (id && !existing) throw new Error("수정할 공지를 찾을 수 없습니다.");
   const notice = {
-    id: uid("notice"),
-    title: data.title,
-    body: data.body,
+    id: existing?.id || uid("notice"),
+    title: String(data.title || "").trim(),
+    body: String(data.body || "").trim(),
     isPinned: Boolean(data.isPinned),
-    createdAt: new Date().toISOString()
+    createdAt: existing?.createdAt || new Date().toISOString(),
+    updatedAt: existing ? new Date().toISOString() : undefined
   };
-  state.data.announcements.unshift(notice);
+  if (!notice.title || !notice.body) throw new Error("제목과 내용을 입력해주세요.");
+  if (existing) {
+    Object.assign(existing, notice);
+  } else {
+    state.data.announcements.unshift(notice);
+  }
   saveData();
   if (canWriteFirestore()) {
     await setFirestoreDoc(`announcements/${notice.id}`, {
       title: notice.title,
       body: notice.body,
       isPinned: notice.isPinned,
-      createdAt: toTimestamp(notice.createdAt)
+      createdAt: toTimestamp(notice.createdAt),
+      updatedAt: notice.updatedAt ? toTimestamp(notice.updatedAt) : undefined
     });
   }
   state.modal = null;
-  toast("공지가 저장되었습니다.");
-  render();
+  toast(existing ? "공지가 수정되었습니다." : "공지가 저장되었습니다.");
+  navigate("notice", notice.id);
+}
+
+async function deleteNotice(id) {
+  if (!isAdmin()) throw new Error("관리자 권한이 필요합니다.");
+  const notice = findNotice(id);
+  if (!notice) throw new Error("삭제할 공지를 찾을 수 없습니다.");
+  state.data.announcements = state.data.announcements.filter((item) => item.id !== notice.id);
+  saveData();
+  if (canWriteFirestore()) await deleteFirestoreDoc(`announcements/${notice.id}`);
+  toast("공지를 삭제했습니다.");
+  navigate("notices");
 }
 
 async function saveAdminPick(data) {

@@ -6,6 +6,7 @@ const password = "qa-admin-password-2026";
 const nickname = `Admin${qaStamp}`;
 const pickName = `QA Admin Pick ${qaStamp}`;
 const noticeTitle = `QA Notice ${qaStamp}`;
+const noticeTempTitle = `QA Delete Notice ${qaStamp}`;
 
 const page = await fetch(
   `http://127.0.0.1:${port}/json/new?${encodeURIComponent(`${appUrl}/#profile`)}`,
@@ -159,6 +160,41 @@ await evaluate(`
   })()
 `);
 await waitFor(`JSON.parse(localStorage.getItem("woogi-stock-data-v1")).announcements.some((item) => item.title === ${JSON.stringify(noticeTitle)} && item.isPinned)`);
+const noticeId = await evaluate(`JSON.parse(localStorage.getItem("woogi-stock-data-v1")).announcements.find((item) => item.title === ${JSON.stringify(noticeTitle)}).id`);
+
+await navigate(`#notice/${noticeId}`);
+await waitFor(`document.body.textContent.includes(${JSON.stringify(noticeTitle)}) && Boolean(document.querySelector('[data-action="modal"][data-modal="notice"][data-id="${noticeId}"]'))`);
+await evaluate(`document.querySelector('[data-action="modal"][data-modal="notice"][data-id="${noticeId}"]').click(); true;`);
+await waitFor(`Boolean(document.querySelector('form[data-form="notice"] [name="id"][value="${noticeId}"]'))`);
+await evaluate(`
+  (() => {
+    const form = document.querySelector('form[data-form="notice"]');
+    form.querySelector('[name="body"]').value = "QA notice body edited";
+    form.requestSubmit();
+    return true;
+  })()
+`);
+await waitFor(`JSON.parse(localStorage.getItem("woogi-stock-data-v1")).announcements.some((item) => item.id === ${JSON.stringify(noticeId)} && item.body === "QA notice body edited" && item.updatedAt)`);
+
+await navigate("#admin");
+await waitFor(`document.body.textContent.includes("관리자") && Boolean(document.querySelector('form[data-form="notice"]'))`);
+await evaluate(`
+  (() => {
+    const form = document.querySelector('form[data-form="notice"]');
+    form.querySelector('[name="title"]').value = ${JSON.stringify(noticeTempTitle)};
+    form.querySelector('[name="body"]').value = "QA notice delete body";
+    form.requestSubmit();
+    return true;
+  })()
+`);
+await waitFor(`JSON.parse(localStorage.getItem("woogi-stock-data-v1")).announcements.some((item) => item.title === ${JSON.stringify(noticeTempTitle)})`);
+const noticeTempId = await evaluate(`JSON.parse(localStorage.getItem("woogi-stock-data-v1")).announcements.find((item) => item.title === ${JSON.stringify(noticeTempTitle)}).id`);
+await navigate(`#notice/${noticeTempId}`);
+await waitFor(`Boolean(document.querySelector('[data-action="delete-notice"][data-id="${noticeTempId}"]'))`);
+await evaluate(`document.querySelector('[data-action="delete-notice"][data-id="${noticeTempId}"]').click(); true;`);
+await waitFor(`!JSON.parse(localStorage.getItem("woogi-stock-data-v1")).announcements.some((item) => item.id === ${JSON.stringify(noticeTempId)})`);
+await navigate("#admin");
+await waitFor(`document.body.textContent.includes("관리자") && Boolean(document.querySelector('[data-action="delete-report"][data-id="${reportId}"]'))`);
 
 await waitFor(`Boolean(document.querySelector('[data-action="delete-report"][data-id="${reportId}"]'))`);
 await evaluate(`
@@ -235,7 +271,8 @@ const result = await evaluate(`
       isAdmin: session.isAdmin,
       hasPick: data.stockPicks.some((item) => item.name === ${JSON.stringify(pickName)}),
       hasPromotedPick: data.stockPicks.some((item) => String(item.category || "").includes("AI포착 승격")),
-      hasPinnedNotice: data.announcements.some((item) => item.title === ${JSON.stringify(noticeTitle)} && item.isPinned),
+      hasPinnedNotice: data.announcements.some((item) => item.title === ${JSON.stringify(noticeTitle)} && item.isPinned && item.body === "QA notice body edited" && item.updatedAt),
+      tempNoticeDeleted: !data.announcements.some((item) => item.title === ${JSON.stringify(noticeTempTitle)}),
       reportsDeleted: !data.reports.some((item) => item.id === ${JSON.stringify(reportId)}),
       favoriteRemoved: !doc.favoriteStocks.KS_005930,
       adminUserVisible: document.body.textContent.includes("회원 관리") && document.body.textContent.includes(${JSON.stringify(email)}),
@@ -252,7 +289,7 @@ socket.close();
 await fetch(`http://127.0.0.1:${port}/json/close/${page.id}`);
 
 if (result.email !== email || !result.isAdmin) throw new Error(`Admin re-login failed: ${JSON.stringify(result)}`);
-if (!result.hasPick || !result.hasPromotedPick || !result.hasPinnedNotice) throw new Error(`Admin create flows failed: ${JSON.stringify(result)}`);
+if (!result.hasPick || !result.hasPromotedPick || !result.hasPinnedNotice || !result.tempNoticeDeleted) throw new Error(`Admin create flows failed: ${JSON.stringify(result)}`);
 if (!result.reportsDeleted) throw new Error(`Admin report delete failed: ${JSON.stringify(result)}`);
 if (!result.favoriteRemoved) throw new Error(`Favorite remove failed: ${JSON.stringify(result)}`);
 if (!result.adminUserVisible) throw new Error(`Admin user management failed: ${JSON.stringify(result)}`);

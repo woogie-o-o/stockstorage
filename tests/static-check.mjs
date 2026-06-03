@@ -261,6 +261,9 @@ for (const flow of [
   "promoteFeatureToPick",
   "promote-feature-pick",
   "AI포착 승격",
+  "deleteNotice",
+  "delete-notice",
+  "공지 수정",
   "handleCompare",
   "종료 추천주 실적"
 ]) {
