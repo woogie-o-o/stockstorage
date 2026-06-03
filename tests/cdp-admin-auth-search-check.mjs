@@ -134,6 +134,20 @@ await evaluate(`
 `);
 await waitFor(`JSON.parse(localStorage.getItem("woogi-stock-data-v1")).stockPicks.some((item) => item.name === ${JSON.stringify(pickName)})`);
 
+await navigate("#capture");
+await waitFor(`Boolean(document.querySelector('[data-action="promote-feature-pick"]'))`);
+const pickCountBeforePromote = await evaluate(`JSON.parse(localStorage.getItem("woogi-stock-data-v1")).stockPicks.length`);
+await evaluate(`
+  (() => {
+    document.querySelector('[data-action="promote-feature-pick"]').click();
+    return true;
+  })()
+`);
+await waitFor(`JSON.parse(localStorage.getItem("woogi-stock-data-v1")).stockPicks.length > ${pickCountBeforePromote}`);
+await waitFor(`JSON.parse(localStorage.getItem("woogi-stock-data-v1")).stockPicks.some((item) => String(item.category || "").includes("AI포착 승격"))`);
+await navigate("#admin");
+await waitFor(`document.body.textContent.includes("관리자") && Boolean(document.querySelector('form[data-form="notice"]'))`);
+
 await evaluate(`
   (() => {
     const form = document.querySelector('form[data-form="notice"]');
@@ -220,6 +234,7 @@ const result = await evaluate(`
       email: session.email,
       isAdmin: session.isAdmin,
       hasPick: data.stockPicks.some((item) => item.name === ${JSON.stringify(pickName)}),
+      hasPromotedPick: data.stockPicks.some((item) => String(item.category || "").includes("AI포착 승격")),
       hasPinnedNotice: data.announcements.some((item) => item.title === ${JSON.stringify(noticeTitle)} && item.isPinned),
       reportsDeleted: !data.reports.some((item) => item.id === ${JSON.stringify(reportId)}),
       favoriteRemoved: !doc.favoriteStocks.KS_005930,
@@ -237,7 +252,7 @@ socket.close();
 await fetch(`http://127.0.0.1:${port}/json/close/${page.id}`);
 
 if (result.email !== email || !result.isAdmin) throw new Error(`Admin re-login failed: ${JSON.stringify(result)}`);
-if (!result.hasPick || !result.hasPinnedNotice) throw new Error(`Admin create flows failed: ${JSON.stringify(result)}`);
+if (!result.hasPick || !result.hasPromotedPick || !result.hasPinnedNotice) throw new Error(`Admin create flows failed: ${JSON.stringify(result)}`);
 if (!result.reportsDeleted) throw new Error(`Admin report delete failed: ${JSON.stringify(result)}`);
 if (!result.favoriteRemoved) throw new Error(`Favorite remove failed: ${JSON.stringify(result)}`);
 if (!result.adminUserVisible) throw new Error(`Admin user management failed: ${JSON.stringify(result)}`);

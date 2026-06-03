@@ -258,6 +258,9 @@ for (const flow of [
   "data-chart=\"ohlc\"",
   "drawCandleMovingAverage",
   "MA60",
+  "promoteFeatureToPick",
+  "promote-feature-pick",
+  "AI포착 승격",
   "handleCompare",
   "종료 추천주 실적"
 ]) {

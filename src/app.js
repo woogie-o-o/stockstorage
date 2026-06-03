@@ -2380,7 +2380,7 @@ function renderCaptureRankRow(row, index) {
   const pattern = isPick ? (item.status === "completed" ? "종료 추천주" : "추천주") : featurePatternLabel(item.pattern) || featureGroupLabel(item.group) || item.pattern || "AI포착";
   const action = isPick
     ? `<button class="btn primary" data-action="open-stock" data-stock="${escapeHtml(key)}">보기</button>`
-    : `<button class="btn primary" data-action="route" data-route="feature-stock" data-param="${escapeHtml(item.id || key)}">상세</button><button class="btn" data-action="open-stock" data-stock="${escapeHtml(key)}">종목</button>`;
+    : `<button class="btn primary" data-action="route" data-route="feature-stock" data-param="${escapeHtml(item.id || key)}">상세</button><button class="btn" data-action="open-stock" data-stock="${escapeHtml(key)}">종목</button>${isAdmin() ? `<button class="btn accent" data-action="promote-feature-pick" data-feature="${escapeHtml(item.id || key)}">승격</button>` : ""}`;
   const decision = isPick ? renderVoteBar(item) : renderFeatureDecisionBadges(item);
   return `
     <article class="capture-rank-row">
@@ -5383,6 +5383,7 @@ async function onClick(event) {
   if (action === "toggle-favorite-pick") await toggleFavoritePick(actionEl.dataset.pick);
   if (action === "toggle-favorite-stock") await toggleFavoriteStock(actionEl.dataset.stock);
   if (action === "remove-favorite-stock") await removeFavoriteStock(actionEl.dataset.stock);
+  if (action === "promote-feature-pick") await promoteFeatureToPick(actionEl.dataset.feature);
   if (action === "generate-ai") await generateAnalysis(actionEl.dataset.stock);
   if (action === "delete-ai") await deleteAnalysis(actionEl.dataset.id);
   if (action === "delete-journal") await deleteJournal(actionEl.dataset.id);
@@ -6629,6 +6630,67 @@ async function saveAdminPick(data) {
   }
   toast("추천주가 추가되었습니다.");
   render();
+}
+
+async function promoteFeatureToPick(featureId) {
+  if (!isAdmin()) throw new Error("관리자 권한이 필요합니다.");
+  const feature = findFeatureStock(featureId);
+  if (!feature) throw new Error("승격할 AI포착 종목을 찾을 수 없습니다.");
+  const key = stockKey(feature);
+  const existing = state.data.stockPicks.find((pick) => stockKey(pick) === key && pick.status !== "completed");
+  if (existing) {
+    toast("이미 추천주로 등록된 종목입니다.");
+    navigate("stock", stockKey(existing));
+    return;
+  }
+  const currentPrice = Number(feature.currentPrice || feature.price || 0);
+  const tradePlan = feature.tradePlan || {};
+  const entryPrice = Number(tradePlan.entryPrice || currentPrice || 0);
+  const targetPrice = Number(tradePlan.targetPrice || (entryPrice ? entryPrice * 1.12 : currentPrice * 1.12) || 0);
+  const pick = normalizePick({
+    id: uid("pick"),
+    ticker: String(feature.ticker || "").trim().toUpperCase(),
+    name: feature.name,
+    market: feature.market,
+    buyPrice: entryPrice,
+    targetPrice,
+    currentPrice,
+    changeRate: feature.changeRate,
+    reason: feature.reason || feature.title || "AI포착에서 추천주로 승격",
+    category: `AI포착 승격 · ${featureTitle(feature)}`,
+    status: "active",
+    createdAt: new Date().toISOString(),
+    source: feature.source || "AI Capture",
+    factors: feature.factors || {},
+    tradePlan: feature.tradePlan || {},
+    decision: feature.decision || {}
+  });
+  state.data.stockPicks.unshift(pick);
+  saveData();
+  if (canWriteFirestore()) {
+    await setFirestoreDoc(`stock_picks/${pick.id}`, {
+      ticker: pick.ticker,
+      name: pick.name,
+      buyPrice: pick.buyPrice,
+      targetPrice: pick.targetPrice,
+      reason: pick.reason,
+      category: pick.category,
+      market: pick.market,
+      isPremium: pick.isPremium,
+      createdAt: toTimestamp(pick.createdAt),
+      currentPrice: pick.currentPrice,
+      changeRate: pick.changeRate,
+      status: pick.status,
+      upVotes: pick.upVotes,
+      downVotes: pick.downVotes,
+      source: pick.source,
+      factors: pick.factors,
+      tradePlan: pick.tradePlan,
+      decision: pick.decision
+    });
+  }
+  toast("AI포착 종목을 추천주로 승격했습니다.");
+  navigate("stock", key);
 }
 
 async function generateAnalysis(key) {
