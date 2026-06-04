@@ -1,12 +1,19 @@
 const port = process.env.CDP_PORT || "9223";
-const appUrl = process.env.WOOGI_APP_URL || "http://127.0.0.1:8019";
+const baseAppUrl = process.env.WOOGI_APP_URL || "http://127.0.0.1:8019";
+const appUrl = process.env.WOOGI_FLOW_APP_URL || baseAppUrl.replace("//127.0.0.1:", "//localhost:");
+const flowUrl = `${appUrl.replace(/\/$/, "")}/?firebase=off`;
 const qaStamp = Date.now().toString(36);
 const email = `community-${qaStamp}@woogi.local`;
 const password = "qa-password-2026";
 const nickname = `커뮤${qaStamp}`;
 
+const existingTargets = await fetch(`http://127.0.0.1:${port}/json/list`).then((res) => res.json()).catch(() => []);
+await Promise.all(existingTargets
+  .filter((target) => String(target.url || "").includes("?firebase=off"))
+  .map((target) => fetch(`http://127.0.0.1:${port}/json/close/${target.id}`).catch(() => null)));
+
 const page = await fetch(
-  `http://127.0.0.1:${port}/json/new?${encodeURIComponent(`${appUrl}/#profile`)}`,
+  `http://127.0.0.1:${port}/json/new?${encodeURIComponent(`${flowUrl}#profile`)}`,
   { method: "PUT" }
 ).then((res) => res.json());
 if (!page) throw new Error("No Chrome page target found for CDP community detail check");
@@ -67,7 +74,7 @@ async function navigate(hash, width = 1280, height = 900) {
     deviceScaleFactor: 1,
     mobile: width < 760
   });
-  await send("Page.navigate", { url: `${appUrl}/${hash}` });
+  await send("Page.navigate", { url: `${flowUrl}${hash}` });
   await waitFor(`Boolean(document.querySelector("main"))`);
 }
 
@@ -117,7 +124,7 @@ await waitFor(`document.body.textContent.includes(${JSON.stringify(postTitle)})`
 const postId = await evaluate(`
   JSON.parse(localStorage.getItem("woogi-stock-data-v1")).posts.find((item) => item.title === ${JSON.stringify(postTitle)}).id
 `);
-await waitFor(`JSON.parse(localStorage.getItem("woogi-stock-data-v1")).posts.find((item) => item.id === ${JSON.stringify(postId)}).imageUrls.some((url) => url.startsWith("data:image/svg+xml"))`);
+await waitFor(`Boolean(JSON.parse(localStorage.getItem("woogi-stock-data-v1")).posts.find((item) => item.id === ${JSON.stringify(postId)})?.imageUrls?.some((url) => url.startsWith("data:image/svg+xml")))`);
 const hadImageAttachment = await evaluate(`
   JSON.parse(localStorage.getItem("woogi-stock-data-v1")).posts.find((item) => item.id === ${JSON.stringify(postId)}).imageUrls.some((url) => url.startsWith("data:image/svg+xml"))
 `);

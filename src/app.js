@@ -4837,19 +4837,19 @@ function renderCommunityPost(post, options = {}) {
   const manageable = canManagePost(post);
   const compact = Boolean(options.compact);
   return `
-    <article class="card post-card" data-post-id="${escapeHtml(post.id)}">
+    <article class="card post-card ${compact ? "compact-post" : "detail-post"}" data-post-id="${escapeHtml(post.id)}">
       <div class="row-between">
         <div>
           <button class="link-title" data-action="route" data-route="post" data-param="${escapeHtml(post.id)}">${escapeHtml(post.title)}</button>
           <div class="post-meta"><span>${escapeHtml(post.nickname)}</span><span>Lv.${post.authorLevel || 1}</span><span>${fmtDateTime(post.createdAt)}</span><span>댓글 ${comments.length}</span></div>
         </div>
         <div class="row actions-wrap">
-          ${compact ? "" : `<button class="btn" data-action="route" data-route="post" data-param="${escapeHtml(post.id)}">상세</button>`}
-          <button class="btn" data-action="like-post" data-id="${escapeHtml(post.id)}">${liked ? "좋아요 취소" : "좋아요"} ${post.likes}</button>
-          ${own ? `<button class="btn" data-action="modal" data-modal="post" data-id="${escapeHtml(post.id)}">수정</button>` : ""}
-          ${manageable ? `<button class="btn danger" data-action="delete-post" data-id="${escapeHtml(post.id)}">삭제</button>` : ""}
-          ${state.user && post.uid !== state.user.uid ? `<button class="btn" data-action="block-user" data-uid="${escapeHtml(post.uid)}">차단</button>` : ""}
-          <button class="btn danger" data-action="report" data-target="post:${escapeHtml(post.id)}">신고</button>
+          ${compact ? "" : `<button class="btn mini community-action" data-action="route" data-route="post" data-param="${escapeHtml(post.id)}">상세</button>`}
+          <button class="btn mini community-action like" data-action="like-post" data-id="${escapeHtml(post.id)}">${liked ? "좋아요 취소" : "좋아요"} ${post.likes}</button>
+          ${own ? `<button class="btn mini community-action" data-action="modal" data-modal="post" data-id="${escapeHtml(post.id)}">수정</button>` : ""}
+          ${manageable ? `<button class="btn mini community-action danger" data-action="delete-post" data-id="${escapeHtml(post.id)}">삭제</button>` : ""}
+          ${state.user && post.uid !== state.user.uid ? `<button class="btn mini community-action" data-action="block-user" data-uid="${escapeHtml(post.uid)}">차단</button>` : ""}
+          <button class="btn mini community-action danger" data-action="report" data-target="post:${escapeHtml(post.id)}">신고</button>
         </div>
       </div>
       ${renderPostBody(post)}

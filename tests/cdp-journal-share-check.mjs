@@ -1,12 +1,19 @@
 const port = process.env.CDP_PORT || "9223";
-const appUrl = process.env.WOOGI_APP_URL || "http://127.0.0.1:8019";
+const baseAppUrl = process.env.WOOGI_APP_URL || "http://127.0.0.1:8019";
+const appUrl = process.env.WOOGI_FLOW_APP_URL || baseAppUrl.replace("//127.0.0.1:", "//localhost:");
+const flowUrl = `${appUrl.replace(/\/$/, "")}/?firebase=off`;
 const qaStamp = Date.now().toString(36);
 const email = `journal-share-${qaStamp}@woogi.local`;
 const password = "qa-password-2026";
 const nickname = `일지${qaStamp}`;
 
+const existingTargets = await fetch(`http://127.0.0.1:${port}/json/list`).then((res) => res.json()).catch(() => []);
+await Promise.all(existingTargets
+  .filter((target) => String(target.url || "").includes("?firebase=off"))
+  .map((target) => fetch(`http://127.0.0.1:${port}/json/close/${target.id}`).catch(() => null)));
+
 const page = await fetch(
-  `http://127.0.0.1:${port}/json/new?${encodeURIComponent(`${appUrl}/#profile`)}`,
+  `http://127.0.0.1:${port}/json/new?${encodeURIComponent(`${flowUrl}#profile`)}`,
   { method: "PUT" }
 ).then((res) => res.json());
 if (!page) throw new Error("No Chrome page target found for CDP journal share check");
@@ -65,7 +72,7 @@ async function navigate(hash, width = 1280, height = 900) {
     deviceScaleFactor: 1,
     mobile: width < 760
   });
-  await send("Page.navigate", { url: `${appUrl}/${hash}` });
+  await send("Page.navigate", { url: `${flowUrl}${hash}` });
   await waitFor(`Boolean(document.querySelector("main"))`);
 }
 

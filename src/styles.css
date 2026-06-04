@@ -3483,9 +3483,21 @@ th {
 .notice-row {
   width: 100%;
   border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
   background: transparent;
   color: inherit;
   text-align: left;
+}
+
+.route-notices .notice-row:hover,
+.route-notice .notice-row:hover {
+  background: #f9fafb;
+}
+
+.route-notices .notice-row:last-child,
+.route-notice .notice-row:last-child {
+  border-bottom: 0;
 }
 
 .notice-row:focus-visible {
@@ -3841,20 +3853,63 @@ th {
 }
 
 .route-community .split {
-  grid-template-columns: minmax(0, 1fr) 314px;
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 840px;
+  gap: 12px;
+}
+
+.route-community .split > aside.stack {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.route-community .split > aside.stack > .panel {
+  min-width: 0;
+}
+
+.route-community .panel-body.feed {
+  padding: 0;
+  background: var(--surface);
 }
 
 .route-community .post-card {
-  padding: 16px 20px;
+  padding: 17px 20px;
+  background: var(--surface);
+}
+
+.route-community .post-card:nth-child(odd) {
+  background: #f9fafb;
+}
+
+.route-community .post-card:hover {
+  background: color-mix(in srgb, var(--accent-2) 4%, #f9fafb);
 }
 
 .route-community .post-card > .row-between {
   align-items: flex-start;
+  gap: 18px;
 }
 
 .route-community .post-card .actions-wrap {
-  flex: 0 0 190px;
+  flex: 0 0 auto;
+  gap: 2px;
+}
+
+.route-community .post-card.compact-post .link-title {
+  max-width: 420px;
+  font-size: 16px;
+}
+
+.route-community .post-card.compact-post .post-body {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 10px 0 0;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .route-community .post-card .form .row {
@@ -4274,20 +4329,33 @@ th {
 .route-community .post-card .actions-wrap {
   flex: 0 0 auto;
   justify-content: flex-end;
+  gap: 2px;
 }
 
-.route-community .post-card .btn {
+.route-community .post-card .btn,
+.route-community .post-card .community-action {
+  min-height: 28px;
+  padding: 0 7px;
+  border-radius: 7px;
   background: transparent;
   color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
 }
 
-.route-community .post-card .btn:hover {
-  background: var(--surface-2);
+.route-community .post-card .btn:hover,
+.route-community .post-card .community-action:hover {
+  background: rgba(2, 32, 71, 0.05);
   color: var(--text);
 }
 
-.route-community .post-card .btn.danger {
+.route-community .post-card .btn.danger,
+.route-community .post-card .community-action.danger {
   color: var(--bad);
+}
+
+.route-community .post-card .community-action.like {
+  color: #4e5968;
 }
 
 .post-body,
